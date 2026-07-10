@@ -559,7 +559,9 @@ export class World {
     let off = 0;
     for (const ch of World.WORD) {
       if (lx >= off && lx < off + World.LETTER_SIZE) {
-        return World.LETTERS[ch][ly][lx - off] ? BlockType.LEAVES : BlockType.AIR;
+        // 翻转 Y 坐标：bitmap 第0行是顶部，但世界 Y 轴向上
+        const bitmapY = World.LETTER_SIZE - 1 - ly;
+        return World.LETTERS[ch][bitmapY][lx - off] ? BlockType.LEAVES : BlockType.AIR;
       }
       off += World.LETTER_SIZE + World.GAP;
     }
