@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<style>
+body { margin:0; background:#111; color:#0f0; font:14px monospace; padding:20px; }
+.step { margin:4px 0; padding:4px 8px; border-left:3px solid #555; }
+.ok { border-color:#0f0; }
+.fail { border-color:#f00; color:#f00; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<h2>Game Module Debug</h2>
+<div id="steps"></div>
+<script type="module">
+const steps = document.getElementById('steps');
+function log(msg, ok=true) {
+  const d = document.createElement('div');
+  d.className = 'step ' + (ok ? 'ok' : 'fail');
+  d.textContent = msg;
+  steps.appendChild(d);
+}
+function fail(msg, err) {
+  log(msg + ' FAILED: ' + err.message + '\n' + (err.stack||''), false);
+  throw err;
+}
+
+try {
+  log('1. Import THREE...');
+  const THREE = await import('three');
+  if (!THREE.Scene) fail('THREE.Scene missing');
+  log('   THREE OK');
+
+  log('2. Import noise...');
+  let noise;
+  try { noise = await import('./js/noise.js'); log('   noise OK'); }
+  catch(e) { fail('noise', e); }
+
+  log('3. Import voxel...');
+  let voxel;
+  try { voxel = await import('./js/voxel.js'); log('   voxel OK, exports: ' + Object.keys(voxel).join(',')); }
+  catch(e) { fail('voxel', e); }
+
+  log('4. Import weapons...');
+  let weapons;
+  try { weapons = await import('./js/weapons.js'); log('   weapons OK, exports: ' + Object.keys(weapons).join(',')); }
+  catch(e) { fail('weapons', e); }
+
+  log('5. Import animals...');
+  let animals;
+  try { animals = await import('./js/animals.js'); log('   animals OK'); }
+  catch(e) { fail('animals', e); }
+
+  log('6. Import game...');
+  let game;
+  try { game = await import('./js/game.js'); log('   game OK, exports: ' + Object.keys(game).join(',')); }
+  catch(e) { fail('game', e); }
+
+  log('7. Create Game instance...');
+  let g;
+  try {
+    g = new game.Game();
+    log('   Game() constructor OK');
+  } catch(e) { fail('Game constructor', e); }
+
+  log('8. Call game.init()...');
+  try {
+    await g.init();
+    log('   game.init() OK');
+  } catch(e) { fail('game.init()', e); }
+
+  log('ALL TESTS PASSED!');
+} catch(e) {
+  // already logged
+}
+</script>
+</body>
+</html>

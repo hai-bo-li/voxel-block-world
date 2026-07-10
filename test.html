@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body style="background:#000;color:#0f0;font-family:monospace;padding:20px;">
+<h2>模块加载测试</h2>
+<pre id="log"></pre>
+<script type="module">
+const log = document.getElementById('log');
+function addLog(msg) { log.textContent += msg + '\n'; }
+
+try {
+  addLog('1. 加载 three...');
+  const THREE = await import('three');
+  addLog('   THREE OK: ' + !!THREE.Scene);
+  
+  addLog('2. 加载 noise.js...');
+  const noise = await import('./js/noise.js');
+  addLog('   noise OK: ' + Object.keys(noise).join(', '));
+  
+  addLog('3. 加载 voxel.js...');
+  const voxel = await import('./js/voxel.js');
+  addLog('   voxel OK: ' + Object.keys(voxel).join(', '));
+  
+  addLog('4. 加载 weapons.js...');
+  const weapons = await import('./js/weapons.js');
+  addLog('   weapons OK: ' + Object.keys(weapons).join(', '));
+  
+  addLog('5. 加载 animals.js...');
+  const animals = await import('./js/animals.js');
+  addLog('   animals OK: ' + Object.keys(animals).join(', '));
+  
+  addLog('6. 加载 game.js...');
+  const game = await import('./js/game.js');
+  addLog('   game OK: ' + Object.keys(game).join(', '));
+  
+  addLog('7. 创建 Game 实例...');
+  const g = new game.Game();
+  addLog('   Game 构造 OK');
+  
+  addLog('8. 初始化...');
+  await g.init();
+  addLog('   Game init OK!');
+  
+} catch(e) {
+  addLog('ERROR: ' + e.message);
+  addLog('Stack: ' + e.stack);
+}
+</script>
+</body>
+</html>

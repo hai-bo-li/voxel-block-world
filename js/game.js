@@ -672,14 +672,47 @@ class Game {
 
   /** 初始化游戏 */
   async init() {
-    this._initRenderer();
-    this._initScene();
-    this._initPlayer();
-    this._initHighlight();
-    this._initWeaponSystem();
-    this._initHotbar();
-    if (this.isMobile) this._initMobileHotbar();
-    this._initEvents();
+    try {
+      console.log('[Game] 开始初始化...');
+
+      console.log('[Game] 1. 初始化渲染器...');
+      this._initRenderer();
+      console.log('[Game] 1. 渲染器初始化完成');
+
+      console.log('[Game] 2. 初始化场景...');
+      this._initScene();
+      console.log('[Game] 2. 场景初始化完成');
+
+      console.log('[Game] 3. 初始化玩家...');
+      this._initPlayer();
+      console.log('[Game] 3. 玩家初始化完成');
+
+      console.log('[Game] 4. 初始化方块高亮...');
+      this._initHighlight();
+      console.log('[Game] 4. 方块高亮初始化完成');
+
+      console.log('[Game] 5. 初始化武器系统...');
+      this._initWeaponSystem();
+      console.log('[Game] 5. 武器系统初始化完成');
+
+      console.log('[Game] 6. 初始化物品栏...');
+      this._initHotbar();
+      console.log('[Game] 6. 物品栏初始化完成');
+
+      if (this.isMobile) {
+        console.log('[Game] 7. 初始化移动端物品栏...');
+        this._initMobileHotbar();
+        console.log('[Game] 7. 移动端物品栏初始化完成');
+      }
+
+      console.log('[Game] 8. 初始化事件...');
+      this._initEvents();
+      console.log('[Game] 8. 事件初始化完成');
+    } catch(e) {
+      console.error('[Game] 初始化失败:', e.message, e.stack);
+      alert('游戏初始化失败: ' + e.message);
+      return;
+    }
 
     // 设置预览视角：近距离平视"Li Hai Bo"立墙
     this.camera.position.set(0, 23, 12);
@@ -733,7 +766,7 @@ class Game {
     // 出生在用户指定位置（仅设玩家数据，相机保持在立墙视角）
     this._spawnX = 5.4;
     this._spawnZ = 22.6;
-    this._spawnY = -27.0;
+    this._spawnY = 25;
     this.player.position.set(this._spawnX, this._spawnY, this._spawnZ);
     this.player.yaw = 0;              // 面朝正北，正对树叶文字立墙
     this.player.pitch = -0.3;         // 微俯视，观赏立墙全貌
@@ -1397,7 +1430,25 @@ class Game {
    启动游戏
    ============================================ */
 window.addEventListener('DOMContentLoaded', async () => {
-  const game = new Game();
-  await game.init();
-  game.animate();
+  try {
+    console.log('[Game] Creating Game instance...');
+    const game = new Game();
+    console.log('[Game] Game instance created, calling init()...');
+    await game.init();
+    console.log('[Game] Init complete, starting animation...');
+    game.animate();
+    console.log('[Game] Animation started!');
+  } catch (e) {
+    console.error('[Game] FATAL ERROR:', e);
+    const overlay = document.getElementById('errorOverlay');
+    if (overlay) {
+      overlay.style.display = 'block';
+      overlay.textContent = 'GAME ERROR:\n' + (e.stack || e.message || String(e));
+    } else {
+      const d = document.createElement('div');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:red;color:white;padding:15px;z-index:99999;font-size:14px;white-space:pre-wrap;';
+      d.textContent = 'GAME ERROR:\n' + (e.stack || e.message || String(e));
+      document.body.prepend(d);
+    }
+  }
 });
