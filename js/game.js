@@ -884,7 +884,8 @@ class Game {
           preview.style.boxShadow = 'inset -3px -3px 0 rgba(0,0,0,0.25), inset 3px 3px 0 rgba(255,255,255,0.15)';
         } else if (item.type === 'weapon') {
           const wDef = WeaponDefs[item.weaponType];
-          preview.style.background = wDef ? `#${wDef.color.toString(16).padStart(6, '0')}` : '#888';
+          const wColor = wDef ? (wDef.color || wDef.bulletColor || 0x888888) : 0x888888;
+          preview.style.background = `#${wColor.toString(16).padStart(6, '0')}`;
           preview.style.boxShadow = `0 0 6px ${preview.style.background}`;
           preview.classList.add('weapon-preview');
         } else if (item.type === 'ammo') {
@@ -978,7 +979,8 @@ class Game {
           preview.style.boxShadow = 'inset -2px -2px 0 rgba(0,0,0,0.25), inset 2px 2px 0 rgba(255,255,255,0.15)';
         } else if (item.type === 'weapon') {
           const wDef = WeaponDefs[item.weaponType];
-          preview.style.background = wDef ? `#${wDef.color.toString(16).padStart(6, '0')}` : '#888';
+          const wColor = wDef ? (wDef.color || wDef.bulletColor || 0x888888) : 0x888888;
+          preview.style.background = `#${wColor.toString(16).padStart(6, '0')}`;
           preview.style.boxShadow = `0 0 4px ${preview.style.background}`;
         } else if (item.type === 'ammo') {
           preview.style.background = item.ammoType === 'pistol' ? '#FFEB3B' : '#00E5FF';
