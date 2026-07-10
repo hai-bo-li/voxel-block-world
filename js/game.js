@@ -835,7 +835,10 @@ class Game {
     // 创建武器第一人称模型容器
     this.weaponContainer = new THREE.Group();
     this.camera.add(this.weaponContainer);
-    this.scene.add(this.camera);
+    // 确保相机在场景中（用于渲染武器模型）
+    if (!this.camera.parent) {
+      this.scene.add(this.camera);
+    }
     
     // 默认装备铁剑
     this._equipWeapon(WeaponType.SWORD);
