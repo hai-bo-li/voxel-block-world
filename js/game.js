@@ -10,11 +10,6 @@ import {
   isMobileDevice, getRenderDistance,
 } from './voxel.js';
 import { AnimalManager } from './animals.js';
-import {
-  WeaponType, WeaponDefs, ItemType, ItemDefs,
-  BulletManager, meleeAttack, raycastBlocks, createWeaponMesh,
-} from './combat.js';
-import { Inventory, PlayerStats } from './inventory.js';
 
 /* ============================================
    玩家类 - 第一人称角色控制
@@ -630,17 +625,6 @@ class Game {
     this.touchController = null;
     this.animalManager = null;
 
-    // 战斗系统
-    this.bulletManager = null;
-    this.inventory = null;
-    this.playerStats = null;
-    this.weaponMesh = null;
-    this.currentWeaponType = null;
-    this.lastAttackTime = 0;
-    this.attackCooldown = 0;
-    this.isAttacking = false;
-    this.attackAnimTime = 0;
-
     // 帧率统计
     this.clock = new THREE.Clock();
     this.frameCount = 0;
@@ -659,11 +643,6 @@ class Game {
       loadingBar: document.getElementById('loadingBar'),
       loadingFill: document.getElementById('loadingFill'),
       controlsPanel: document.getElementById('controlsPanel'),
-      inventoryPanel: document.getElementById('inventoryPanel'),
-      healthBar: document.getElementById('healthBar'),
-      healthFill: document.getElementById('healthFill'),
-      weaponInfo: document.getElementById('weaponInfo'),
-      ammoCount: document.getElementById('ammoCount'),
     };
 
     // 可选方块列表
@@ -680,8 +659,6 @@ class Game {
     this._initScene();
     this._initPlayer();
     this._initHighlight();
-    this._initCombat();
-    this._initInventory();
     this._initHotbar();
     if (this.isMobile) this._initMobileHotbar();
     this._initEvents();
@@ -828,247 +805,6 @@ class Game {
     this.highlight = new BlockHighlight(this.scene);
   }
 
-  /** 初始化战斗系统 */
-  _initCombat() {
-    this.bulletManager = new BulletManager(this.scene);
-    
-    // 创建武器第一人称模型容器
-    this.weaponContainer = new THREE.Group();
-    this.camera.add(this.weaponContainer);
-    // 确保相机在场景中（用于渲染武器模型）
-    if (!this.camera.parent) {
-      this.scene.add(this.camera);
-    }
-    
-    // 默认装备铁剑
-    this._equipWeapon(WeaponType.SWORD);
-  }
-
-  /** 初始化背包系统 */
-  _initInventory() {
-    this.inventory = new Inventory();
-    this.playerStats = new PlayerStats();
-    this._updateHealthUI();
-    this._updateWeaponUI();
-  }
-
-  /** 装备武器 */
-  _equipWeapon(weaponType) {
-    // 移除旧武器模型
-    if (this.weaponMesh) {
-      this.weaponContainer.remove(this.weaponMesh);
-      this.weaponMesh.traverse(child => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) child.material.dispose();
-      });
-    }
-    
-    // 创建新武器模型
-    this.weaponMesh = createWeaponMesh(weaponType);
-    this.weaponMesh.position.set(0.3, -0.3, -0.5);
-    this.weaponMesh.rotation.set(0, 0, -0.3);
-    this.weaponContainer.add(this.weaponMesh);
-    
-    this.currentWeaponType = weaponType;
-    this._updateWeaponUI();
-  }
-
-  /** 执行攻击 */
-  _performAttack() {
-    const weapon = this.inventory.getCurrentWeapon();
-    if (!weapon) return;
-    
-    const weaponDef = weapon.weaponDef;
-    const now = performance.now() / 1000;
-    
-    // 检查攻击冷却
-    if (now - this.lastAttackTime < 1 / weaponDef.fireRate) return;
-    this.lastAttackTime = now;
-    
-    // 播放攻击动画
-    this.isAttacking = true;
-    this.attackAnimTime = 0;
-    
-    if (weaponDef.type === 'melee') {
-      // 近战攻击
-      const hit = meleeAttack(this.player, this.world, weaponDef);
-      if (hit) {
-        // 对方块造成伤害（简单实现：直接破坏）
-        if (hit.damage >= 20) {
-          this.world.setBlock(hit.x, hit.y, hit.z, BlockType.AIR);
-          this.world.markDirty(
-            Math.floor(hit.x / CHUNK_SIZE),
-            Math.floor(hit.z / CHUNK_SIZE)
-          );
-        }
-      }
-    } else if (weaponDef.type === 'ranged') {
-      // 远程射击
-      const slot = weapon.slot;
-      const ammoType = weaponDef === WeaponDefs[WeaponType.BOW] ? 'arrow' : 'bullet';
-      
-      // 检查弹药
-      if (this.inventory.countItem(ammoType) <= 0) {
-        // 没有弹药，显示提示
-        this._showAmmoWarning();
-        return;
-      }
-      
-      // 消耗弹药
-      this.inventory.removeItem(ammoType, 1);
-      
-      // 发射子弹
-      const origin = this.camera.position.clone();
-      const direction = new THREE.Vector3();
-      this.camera.getWorldDirection(direction);
-      
-      const isArrow = weaponDef === WeaponDefs[WeaponType.BOW];
-      this.bulletManager.shoot(
-        origin,
-        direction,
-        weaponDef.projectileSpeed,
-        weaponDef.damage,
-        isArrow
-      );
-      
-      this._updateWeaponUI();
-    }
-  }
-
-  /** 显示弹药不足警告 */
-  _showAmmoWarning() {
-    let warning = document.getElementById('ammoWarning');
-    if (!warning) {
-      warning = document.createElement('div');
-      warning.id = 'ammoWarning';
-      warning.style.cssText = 
-        'position:fixed;top:60%;left:50%;transform:translateX(-50%);' +
-        'color:#ff4444;font-size:18px;font-weight:bold;' +
-        'text-shadow:0 2px 4px rgba(0,0,0,0.8);pointer-events:none;z-index:100;' +
-        'transition:opacity 0.5s;';
-      document.body.appendChild(warning);
-    }
-    warning.textContent = '弹药不足！';
-    warning.style.opacity = '1';
-    setTimeout(() => { warning.style.opacity = '0'; }, 1500);
-  }
-
-  /** 更新血量UI */
-  _updateHealthUI() {
-    if (this.ui.healthFill) {
-      const pct = (this.playerStats.health / this.playerStats.maxHealth) * 100;
-      this.ui.healthFill.style.width = `${pct}%`;
-    }
-  }
-
-  /** 更新武器UI */
-  _updateWeaponUI() {
-    const weapon = this.inventory.getCurrentWeapon();
-    if (this.ui.weaponInfo && weapon) {
-      this.ui.weaponInfo.textContent = weapon.weaponDef.name;
-    }
-    if (this.ui.ammoCount && weapon && weapon.weaponDef.type === 'ranged') {
-      const ammoType = weapon.weaponDef === WeaponDefs[WeaponType.BOW] ? 'arrow' : 'bullet';
-      const count = this.inventory.countItem(ammoType);
-      this.ui.ammoCount.textContent = `× ${count}`;
-    } else if (this.ui.ammoCount) {
-      this.ui.ammoCount.textContent = '';
-    }
-  }
-
-  /** 切换背包 */
-  _toggleInventory() {
-    const isOpen = this.inventory.toggleInventory();
-    if (this.ui.inventoryPanel) {
-      this.ui.inventoryPanel.style.display = isOpen ? 'flex' : 'none';
-      if (isOpen) {
-        this._renderInventoryUI();
-        // 释放指针锁定
-        if (document.pointerLockElement) {
-          document.exitPointerLock();
-        }
-      }
-    }
-  }
-
-  /** 渲染背包UI */
-  _renderInventoryUI() {
-    const panel = this.ui.inventoryPanel;
-    if (!panel) return;
-    
-    // 清空并重新渲染
-    panel.innerHTML = '<div class="inv-title">背包</div><div class="inv-grid" id="invGrid"></div><div class="inv-hotbar" id="invHotbar"></div>';
-    
-    const grid = panel.querySelector('#invGrid');
-    const hotbar = panel.querySelector('#invHotbar');
-    
-    // 渲染背包格子
-    this.inventory.slots.forEach((slot, i) => {
-      const slotEl = this._createSlotElement(slot, i, false);
-      grid.appendChild(slotEl);
-    });
-    
-    // 渲染快捷栏
-    this.inventory.hotbar.forEach((slot, i) => {
-      const slotEl = this._createSlotElement(slot, i, true);
-      if (i === this.inventory.selectedSlot) {
-        slotEl.classList.add('selected');
-      }
-      hotbar.appendChild(slotEl);
-    });
-  }
-
-  /** 创建物品槽UI元素 */
-  _createSlotElement(slot, index, isHotbar) {
-    const el = document.createElement('div');
-    el.className = 'inv-slot';
-    el.dataset.index = index;
-    el.dataset.hotbar = isHotbar;
-    
-    if (!slot.isEmpty()) {
-      const def = slot.getDef();
-      if (def) {
-        // 物品图标
-        const icon = document.createElement('div');
-        icon.className = 'inv-item-icon';
-        
-        if (def.type === ItemType.WEAPON) {
-          const weaponDef = WeaponDefs[def.weaponType];
-          icon.style.background = `#${weaponDef.color.toString(16).padStart(6, '0')}`;
-          icon.title = weaponDef.name;
-        } else {
-          icon.style.background = '#888';
-          icon.title = def.name || slot.itemId;
-        }
-        el.appendChild(icon);
-        
-        // 数量
-        if (slot.count > 1) {
-          const count = document.createElement('span');
-          count.className = 'inv-item-count';
-          count.textContent = slot.count;
-          el.appendChild(count);
-        }
-      }
-    }
-    
-    // 点击事件
-    el.addEventListener('click', () => {
-      // 快捷栏选择
-      if (isHotbar) {
-        this.inventory.selectSlot(index);
-        const weapon = this.inventory.getCurrentWeapon();
-        if (weapon) {
-          this._equipWeapon(weapon.def.weaponType);
-        }
-        this._updateHotbar();
-        this._renderInventoryUI();
-      }
-    });
-    
-    return el;
-  }
-
   /** 初始化物品栏UI */
   _initHotbar() {
     const hotbar = this.ui.hotbar;
@@ -1161,62 +897,17 @@ class Game {
     document.addEventListener('keydown', (e) => {
       this.player.keys[e.code] = true;
 
-      // 数字键选择方块/快捷栏
+      // 数字键选择方块
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
         const idx = parseInt(e.code.charAt(5)) - 1;
-        if (this.inventory) {
-          this.inventory.selectSlot(idx);
-          const weapon = this.inventory.getCurrentWeapon();
-          if (weapon) {
-            this._equipWeapon(weapon.def.weaponType);
-          }
-        }
         if (idx < this.blockTypes.length) {
           this.selectedSlot = idx;
           this._updateHotbar();
         }
       }
 
-      // E 键：打开/关闭背包
-      if (e.code === 'KeyE' && this.isRunning) {
-        this._toggleInventory();
-      }
-
-      // Q 键：切换武器/空手
-      if (e.code === 'KeyQ' && this.isRunning && this.isPointerLocked) {
-        if (this.currentWeaponType) {
-          // 收起武器，切换到空手
-          if (this.weaponMesh) {
-            this.weaponContainer.remove(this.weaponMesh);
-            this.weaponMesh = null;
-          }
-          this.currentWeaponType = null;
-        } else {
-          // 装备默认武器
-          this._equipWeapon(WeaponType.SWORD);
-        }
-        this._updateWeaponUI();
-      }
-
-      // F 键：使用消耗品（治疗药水）
-      if (e.code === 'KeyF' && this.isRunning && this.isPointerLocked) {
-        const slot = this.inventory?.getSelectedItem();
-        if (slot && slot.itemId === 'health_potion') {
-          const healed = this.playerStats.heal(30);
-          if (healed > 0) {
-            this.inventory.removeItem('health_potion', 1);
-            this._updateHealthUI();
-          }
-        }
-      }
-
       // ESC 暂停（移动端也支持）
       if (e.code === 'Escape' && this.isRunning) {
-        // 如果背包打开，先关闭背包
-        if (this.inventory?.isOpen) {
-          this._toggleInventory();
-          return;
-        }
         if (this.isMobile) {
           this.isRunning = false;
           this.ui.pauseScreen.style.display = 'flex';
@@ -1250,13 +941,7 @@ class Game {
     document.addEventListener('mousedown', (e) => {
       if (!this.isPointerLocked) return;
       if (e.button === 0) {
-        // 左键：如果持有武器则攻击，否则放置方块
-        const weapon = this.inventory?.getCurrentWeapon();
-        if (weapon) {
-          this._performAttack();
-        } else {
-          this.player.placeBlock();
-        }
+        this.player.placeBlock();
       } else if (e.button === 2) {
         this.player.breakBlock();
       }
@@ -1470,14 +1155,6 @@ class Game {
       this.player.update(dt);
       this.world.update(this.player.position.x, this.player.position.z);
       this.highlight.update(this.player.targetBlock);
-      
-      // 更新子弹
-      if (this.bulletManager) {
-        this.bulletManager.update(dt, this.world);
-      }
-      
-      // 更新武器攻击动画
-      this._updateWeaponAnimation(dt);
     }
 
     // 更新机器人 AI（始终运行，即使暂停状态也让机器人有生命感）
@@ -1491,28 +1168,6 @@ class Game {
     // 更新UI（降低更新频率）
     if (this.frameCount % 10 === 0) {
       this._updateDebugInfo();
-    }
-  }
-
-  /** 更新武器攻击动画 */
-  _updateWeaponAnimation(dt) {
-    if (!this.weaponMesh) return;
-    
-    if (this.isAttacking) {
-      this.attackAnimTime += dt;
-      const animDuration = 0.3; // 动画持续时间
-      const progress = Math.min(this.attackAnimTime / animDuration, 1);
-      
-      // 挥砍动画：先向后摆，再向前挥
-      const swingAngle = Math.sin(progress * Math.PI) * 0.8;
-      this.weaponMesh.rotation.x = -swingAngle;
-      this.weaponMesh.position.z = -0.5 - Math.sin(progress * Math.PI) * 0.2;
-      
-      if (progress >= 1) {
-        this.isAttacking = false;
-        this.weaponMesh.rotation.x = 0;
-        this.weaponMesh.position.z = -0.5;
-      }
     }
   }
 }
