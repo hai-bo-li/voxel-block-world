@@ -776,6 +776,7 @@ class Game {
   /** 初始化场景与灯光 */
   _initScene() {
     this.scene = new THREE.Scene();
+    this.scene._particles = []; // 武器系统粒子容器
 
     // 雾效：距离根据设备动态调整，移动端增加雾距避免近处物体泛蓝
     const fogFar = this.renderDistance * CHUNK_SIZE + 4;
@@ -1372,7 +1373,8 @@ class Game {
 
       // 更新武器系统
       if (this.weaponManager) {
-        this.weaponManager.update(dt);
+        const isMoving = this.player.keys['KeyW'] || this.player.keys['KeyA'] || this.player.keys['KeyS'] || this.player.keys['KeyD'];
+        this.weaponManager.update(dt, isMoving);
       }
     }
 
