@@ -10,6 +10,10 @@ import {
   isMobileDevice, getRenderDistance,
 } from './voxel.js';
 import { AnimalManager } from './animals.js';
+import {
+  WeaponManager, WeaponRenderer, Inventory, InventoryUI,
+  WeaponType, WeaponDefs, getBlockMaxHP,
+} from './weapons.js';
 
 /* ============================================
    玩家类 - 第一人称角色控制
@@ -645,12 +649,12 @@ class Game {
       controlsPanel: document.getElementById('controlsPanel'),
     };
 
-    // 可选方块列表
-    this.blockTypes = [
-      BlockType.GRASS, BlockType.DIRT, BlockType.STONE,
-      BlockType.SAND, BlockType.WOOD, BlockType.LEAVES,
-    ];
-    this.selectedSlot = 0;
+    // 背包系统
+    this.inventory = new Inventory();
+    this.inventoryUI = null;  // 延迟初始化（需要DOM就绪）
+
+    // 武器管理器（延迟初始化，需要scene和camera）
+    this.weaponManager = null;
   }
 
   /** 初始化游戏 */
@@ -659,6 +663,7 @@ class Game {
     this._initScene();
     this._initPlayer();
     this._initHighlight();
+    this._initWeaponSystem();
     this._initHotbar();
     if (this.isMobile) this._initMobileHotbar();
     this._initEvents();
@@ -800,6 +805,12 @@ class Game {
     this.player = new Player(this.camera, this.world);
   }
 
+  /** 初始化武器系统 */
+  _initWeaponSystem() {
+    this.weaponManager = new WeaponManager(this.scene, this.camera, this.world, this.animalManager);
+    this.inventoryUI = new InventoryUI(this.inventory);
+  }
+
   /** 初始化方块高亮 */
   _initHighlight() {
     this.highlight = new BlockHighlight(this.scene);
@@ -810,16 +821,40 @@ class Game {
     const hotbar = this.ui.hotbar;
     hotbar.innerHTML = '';
 
-    this.blockTypes.forEach((type, i) => {
+    // 渲染快捷栏（背包前9格）
+    for (let i = 0; i < this.inventory.cols; i++) {
+      const item = this.inventory.getHotbarItem(i);
       const slot = document.createElement('div');
-      slot.className = `hotbar-slot${i === 0 ? ' selected' : ''}`;
+      slot.className = `hotbar-slot${i === this.inventory.selectedSlot ? ' selected' : ''}`;
       slot.dataset.index = i;
 
       const preview = document.createElement('div');
       preview.className = 'block-preview';
-      preview.style.background = getBlockColor(type);
-      // 添加3D效果
-      preview.style.boxShadow = 'inset -3px -3px 0 rgba(0,0,0,0.25), inset 3px 3px 0 rgba(255,255,255,0.15)';
+
+      if (item) {
+        if (item.type === 'block') {
+          preview.style.background = getBlockColor(item.blockType);
+          preview.style.boxShadow = 'inset -3px -3px 0 rgba(0,0,0,0.25), inset 3px 3px 0 rgba(255,255,255,0.15)';
+        } else if (item.type === 'weapon') {
+          const wDef = WeaponDefs[item.weaponType];
+          preview.style.background = wDef ? `#${wDef.color.toString(16).padStart(6, '0')}` : '#888';
+          preview.style.boxShadow = `0 0 6px ${preview.style.background}`;
+          preview.classList.add('weapon-preview');
+        } else if (item.type === 'ammo') {
+          preview.style.background = item.ammoType === 'pistol' ? '#FFEB3B' : '#00E5FF';
+          preview.style.boxShadow = `0 0 4px ${preview.style.background}`;
+          preview.classList.add('ammo-preview');
+        }
+
+        // 数量标签
+        if (item.count > 1) {
+          const countEl = document.createElement('span');
+          countEl.className = 'slot-count';
+          countEl.textContent = item.count;
+          slot.appendChild(countEl);
+        }
+      }
+
       slot.appendChild(preview);
 
       const keyLabel = document.createElement('span');
@@ -828,28 +863,47 @@ class Game {
       slot.appendChild(keyLabel);
 
       hotbar.appendChild(slot);
-    });
+    }
   }
 
   /** 更新物品栏选中状态 */
   _updateHotbar() {
     const slots = this.ui.hotbar.querySelectorAll('.hotbar-slot');
     slots.forEach((slot, i) => {
-      slot.classList.toggle('selected', i === this.selectedSlot);
+      slot.classList.toggle('selected', i === this.inventory.selectedSlot);
     });
-    this.player.selectedBlock = this.blockTypes[this.selectedSlot];
 
-    // 更新选中方块名称提示（热键栏上方）
-    const name = BlockNames[this.blockTypes[this.selectedSlot]] || '';
+    // 同步当前物品到玩家和武器系统
+    const currentItem = this.inventory.getCurrentItem();
+    if (currentItem && currentItem.type === 'block') {
+      this.player.selectedBlock = currentItem.blockType;
+    }
+
+    // 更新武器渲染
+    if (this.weaponManager) {
+      const weaponType = this.inventory.getCurrentWeaponType();
+      this.weaponManager.switchWeapon(weaponType);
+    }
+
+    // 更新选中物品名称提示
     const nameEl = this.ui.selectedBlockName;
-    if (nameEl) {
+    if (nameEl && currentItem) {
+      let name = '';
+      if (currentItem.type === 'block') {
+        name = BlockNames[currentItem.blockType] || '';
+      } else if (currentItem.type === 'weapon') {
+        name = WeaponDefs[currentItem.weaponType]?.name || '';
+      } else if (currentItem.type === 'ammo') {
+        name = currentItem.ammoType === 'pistol' ? '手枪弹药' : '步枪弹药';
+      }
       nameEl.textContent = name;
-      // 切换时短暂放大动画
       nameEl.style.transform = 'translateX(-50%) scale(1.15)';
       nameEl.style.opacity = '1';
       setTimeout(() => {
         nameEl.style.transform = 'translateX(-50%) scale(1)';
       }, 120);
+    } else if (nameEl) {
+      nameEl.textContent = '';
     }
 
     // 同步更新移动端物品栏
@@ -862,32 +916,53 @@ class Game {
     if (!mobileHotbar) return;
     mobileHotbar.innerHTML = '';
 
-    this.blockTypes.forEach((type, i) => {
+    for (let i = 0; i < this.inventory.cols; i++) {
+      const item = this.inventory.getHotbarItem(i);
       const slot = document.createElement('div');
-      slot.className = `m-slot${i === 0 ? ' selected' : ''}`;
+      slot.className = `m-slot${i === this.inventory.selectedSlot ? ' selected' : ''}`;
       slot.dataset.index = i;
 
       const preview = document.createElement('div');
       preview.className = 'm-block-preview';
-      preview.style.background = getBlockColor(type);
-      preview.style.boxShadow = 'inset -2px -2px 0 rgba(0,0,0,0.25), inset 2px 2px 0 rgba(255,255,255,0.15)';
+
+      if (item) {
+        if (item.type === 'block') {
+          preview.style.background = getBlockColor(item.blockType);
+          preview.style.boxShadow = 'inset -2px -2px 0 rgba(0,0,0,0.25), inset 2px 2px 0 rgba(255,255,255,0.15)';
+        } else if (item.type === 'weapon') {
+          const wDef = WeaponDefs[item.weaponType];
+          preview.style.background = wDef ? `#${wDef.color.toString(16).padStart(6, '0')}` : '#888';
+          preview.style.boxShadow = `0 0 4px ${preview.style.background}`;
+        } else if (item.type === 'ammo') {
+          preview.style.background = item.ammoType === 'pistol' ? '#FFEB3B' : '#00E5FF';
+          preview.style.boxShadow = `0 0 3px ${preview.style.background}`;
+        }
+
+        if (item.count > 1) {
+          const countEl = document.createElement('span');
+          countEl.className = 'm-slot-count';
+          countEl.textContent = item.count;
+          slot.appendChild(countEl);
+        }
+      }
+
       slot.appendChild(preview);
 
       slot.addEventListener('touchstart', (e) => {
         e.preventDefault();
-        this.selectedSlot = i;
+        this.inventory.selectedSlot = i;
         this._updateHotbar();
       });
 
       mobileHotbar.appendChild(slot);
-    });
+    }
   }
 
   /** 更新移动端物品栏选中状态 */
   _updateMobileHotbar() {
     const slots = document.querySelectorAll('#mobileHotbar .m-slot');
     slots.forEach((slot, i) => {
-      slot.classList.toggle('selected', i === this.selectedSlot);
+      slot.classList.toggle('selected', i === this.inventory.selectedSlot);
     });
   }
 
@@ -895,15 +970,33 @@ class Game {
   _initEvents() {
     // 键盘事件（桌面端 + 移动端外接键盘通用）
     document.addEventListener('keydown', (e) => {
+      // 背包打开时拦截游戏输入
+      if (this.isInventoryOpen) {
+        if (e.code === 'KeyE' || e.code === 'Escape') {
+          this.inventoryUI.close();
+          this.isInventoryOpen = false;
+          if (!this.isMobile) this.canvas.requestPointerLock();
+        }
+        return;
+      }
+
       this.player.keys[e.code] = true;
 
-      // 数字键选择方块
+      // 数字键选择快捷栏槽位
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
         const idx = parseInt(e.code.charAt(5)) - 1;
-        if (idx < this.blockTypes.length) {
-          this.selectedSlot = idx;
+        if (idx < this.inventory.cols) {
+          this.inventory.selectedSlot = idx;
           this._updateHotbar();
         }
+      }
+
+      // E键打开背包
+      if (e.code === 'KeyE' && this.isRunning && !this.isMobile) {
+        this.isInventoryOpen = true;
+        document.exitPointerLock();
+        this.inventoryUI.open();
+        return;
       }
 
       // ESC 暂停（移动端也支持）
@@ -915,15 +1008,20 @@ class Game {
         }
       }
 
-      // 视野调整快捷键（= 放大/缩小视野，- 缩小/扩大视野）
-      if (e.code === 'Equal') {           // = 放大画面 → 视野变窄
+      // 视野调整快捷键
+      if (e.code === 'Equal') {
         this._adjustFOV(-5);
       }
-      if (e.code === 'Minus') {           // - 缩小画面 → 视野变广
+      if (e.code === 'Minus') {
         this._adjustFOV(5);
       }
-      if (e.code === 'Digit0' || e.code === 'Numpad0') {  // 0 重置视野
+      if (e.code === 'Digit0' || e.code === 'Numpad0') {
         this._resetFOV();
+      }
+
+      // R键装填弹药
+      if (e.code === 'KeyR' && this.isRunning) {
+        this._reloadWeapon();
       }
     });
 
@@ -940,31 +1038,43 @@ class Game {
     // 鼠标点击（仅桌面端指针锁定后）
     document.addEventListener('mousedown', (e) => {
       if (!this.isPointerLocked) return;
+
+      const currentItem = this.inventory.getCurrentItem();
+
       if (e.button === 0) {
-        this.player.placeBlock();
+        // 左键：武器攻击 或 放置方块
+        if (currentItem && currentItem.type === 'weapon') {
+          this._weaponAttack();
+        } else {
+          this.player.placeBlock();
+        }
       } else if (e.button === 2) {
-        this.player.breakBlock();
+        // 右键：武器次要功能 或 破坏方块
+        if (currentItem && currentItem.type === 'weapon') {
+          // 近战武器右键格挡（暂无实现，保留）
+        } else {
+          this.player.breakBlock();
+        }
       }
     });
 
     // 禁用右键菜单
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // 滚轮切换方块（仅桌面端指针锁定后）
+    // 滚轮切换快捷栏（仅桌面端指针锁定后）
     document.addEventListener('wheel', (e) => {
       if (!this.isPointerLocked) return;
 
       // Ctrl + 滚轮 / 触控板双指缩放 → 调整视野
-      // 捏合(deltaY>0) = 缩小画面 = 视野变广(FOV变大)；推开(deltaY<0) = 放大画面 = 视野变窄(FOV变小)
       if (e.ctrlKey) {
         this._adjustFOV(e.deltaY > 0 ? 5 : -5);
         return;
       }
 
       if (e.deltaY > 0) {
-        this.selectedSlot = (this.selectedSlot + 1) % this.blockTypes.length;
+        this.inventory.selectedSlot = (this.inventory.selectedSlot + 1) % this.inventory.cols;
       } else {
-        this.selectedSlot = (this.selectedSlot - 1 + this.blockTypes.length) % this.blockTypes.length;
+        this.inventory.selectedSlot = (this.inventory.selectedSlot - 1 + this.inventory.cols) % this.inventory.cols;
       }
       this._updateHotbar();
     });
@@ -1085,6 +1195,75 @@ class Game {
   }
 
   /** 短暂显示 FOV 提示 */
+  /** 武器攻击（射击/近战） */
+  _weaponAttack() {
+    const currentItem = this.inventory.getCurrentItem();
+    if (!currentItem || currentItem.type !== 'weapon') return;
+
+    const weaponType = currentItem.weaponType;
+    const wDef = WeaponDefs[weaponType];
+    if (!wDef) return;
+
+    if (wDef.category === 'ranged') {
+      // 远程武器：检查弹药
+      const ammoType = weaponType === WeaponType.PISTOL ? 'pistol' : 'rifle';
+      const ammoSlot = this.inventory.findAmmo(ammoType);
+      if (ammoSlot === -1) {
+        this._showHint('没有弹药！');
+        return;
+      }
+      // 消耗弹药
+      this.inventory.consumeAmmo(ammoSlot);
+      // 射击
+      this.weaponManager.shoot(weaponType, this.player);
+    } else {
+      // 近战武器：挥砍
+      this.weaponManager.meleeAttack(weaponType, this.player);
+    }
+
+    // 刷新快捷栏显示
+    this._initHotbar();
+    this._updateHotbar();
+  }
+
+  /** 装填弹药（R键） */
+  _reloadWeapon() {
+    const currentItem = this.inventory.getCurrentItem();
+    if (!currentItem || currentItem.type !== 'weapon') return;
+
+    const wDef = WeaponDefs[currentItem.weaponType];
+    if (!wDef || wDef.category !== 'ranged') return;
+
+    const ammoType = currentItem.weaponType === WeaponType.PISTOL ? 'pistol' : 'rifle';
+    const ammoSlot = this.inventory.findAmmo(ammoType);
+    if (ammoSlot === -1) {
+      this._showHint('没有弹药！');
+    } else {
+      this._showHint('装填完成');
+    }
+  }
+
+  /** 显示提示信息 */
+  _showHint(text) {
+    let hint = document.getElementById('gameHint');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.id = 'gameHint';
+      hint.style.cssText =
+        'position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);' +
+        'color:#FFD700;font-size:22px;font-weight:bold;' +
+        'text-shadow:0 2px 8px rgba(0,0,0,0.7);pointer-events:none;z-index:100;' +
+        'transition:opacity 0.4s;';
+      document.body.appendChild(hint);
+    }
+    hint.textContent = text;
+    hint.style.opacity = '1';
+    if (this._hintTimer) clearTimeout(this._hintTimer);
+    this._hintTimer = setTimeout(() => {
+      hint.style.opacity = '0';
+    }, 1500);
+  }
+
   _showFOVHint() {
     if (this._fovHintTimer) clearTimeout(this._fovHintTimer);
     let hint = document.getElementById('fovHint');
@@ -1112,12 +1291,28 @@ class Game {
     const cz = Math.floor(pos.z / CHUNK_SIZE);
     const chunks = this.world.chunks.size;
 
+    // 武器弹药信息
+    let weaponInfo = '';
+    const currentItem = this.inventory.getCurrentItem();
+    if (currentItem && currentItem.type === 'weapon') {
+      const wDef = WeaponDefs[currentItem.weaponType];
+      if (wDef && wDef.category === 'ranged') {
+        const ammoType = currentItem.weaponType === WeaponType.PISTOL ? 'pistol' : 'rifle';
+        const ammoSlot = this.inventory.findAmmo(ammoType);
+        const ammoCount = ammoSlot !== -1 ? this.inventory.slots[ammoSlot].count : 0;
+        weaponInfo = `<br>武器: ${wDef.name} | 弹药: ${ammoCount}`;
+      } else if (wDef) {
+        weaponInfo = `<br>武器: ${wDef.name}`;
+      }
+    }
+
     this.ui.debugInfo.innerHTML =
       `FPS: ${this.fps}<br>` +
       `FOV: ${this.fov.toFixed(0)}°<br>` +
       `XYZ: ${pos.x.toFixed(1)} / ${pos.y.toFixed(1)} / ${pos.z.toFixed(1)}<br>` +
       `区块: ${cx}, ${cz} | 已加载: ${chunks}<br>` +
-      `机器人: ${this.animalManager ? this.animalManager.animals.length : 0} 只`;
+      `机器人: ${this.animalManager ? this.animalManager.animals.length : 0} 只` +
+      weaponInfo;
 
     // 目标方块提示（已禁用）
     this.ui.blockHighlight.style.display = 'none';
@@ -1155,6 +1350,11 @@ class Game {
       this.player.update(dt);
       this.world.update(this.player.position.x, this.player.position.z);
       this.highlight.update(this.player.targetBlock);
+
+      // 更新武器系统
+      if (this.weaponManager) {
+        this.weaponManager.update(dt);
+      }
     }
 
     // 更新机器人 AI（始终运行，即使暂停状态也让机器人有生命感）

@@ -584,3 +584,284 @@ html, body {
     font-size: 11px;
   }
 }
+
+/* ============================================
+   背包系统样式
+   ============================================ */
+
+/* 背包全屏遮罩 */
+#inventoryScreen {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#inventoryPanel {
+  background: rgba(30, 30, 30, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 20px;
+  min-width: 380px;
+  max-width: 90vw;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+}
+
+#inventoryTitle {
+  color: #fff;
+  font-size: 22px;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 16px;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+  padding-bottom: 10px;
+}
+
+/* 快捷栏区域标题 */
+.inventory-section-title {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  margin: 12px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* 快捷栏格子 */
+.inventory-hotbar {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+/* 主背包格子 */
+#inventoryGrid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 4px;
+}
+
+/* 背包格子 */
+.inv-slot {
+  width: 44px;
+  height: 44px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.inv-slot:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.inv-slot.hotbar-slot-inv {
+  border-color: rgba(100, 180, 255, 0.3);
+  background: rgba(100, 180, 255, 0.05);
+}
+
+.inv-slot .inv-preview {
+  width: 28px;
+  height: 28px;
+  border-radius: 2px;
+  image-rendering: pixelated;
+}
+
+.inv-slot .inv-count {
+  position: absolute;
+  bottom: 1px;
+  right: 3px;
+  font-size: 11px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+}
+
+.inv-slot .inv-name {
+  display: none;
+  position: absolute;
+  bottom: 110%;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: rgba(0,0,0,0.9);
+  color: #fff;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 210;
+}
+
+.inv-slot:hover .inv-name {
+  display: block;
+}
+
+#inventoryClose {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+  text-align: center;
+  margin-top: 16px;
+}
+
+/* ============================================
+   武器/弹药物品栏样式增强
+   ============================================ */
+
+/* 武器图标发光效果 */
+.weapon-preview {
+  border-radius: 4px !important;
+  position: relative;
+}
+
+.weapon-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 50%);
+}
+
+/* 弹药图标 */
+.ammo-preview {
+  border-radius: 50% !important;
+  position: relative;
+}
+
+/* 物品数量标签 */
+.slot-count {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.5);
+  line-height: 1;
+  z-index: 5;
+}
+
+/* 移动端数量标签 */
+.m-slot-count {
+  position: absolute;
+  bottom: 0;
+  right: 2px;
+  font-size: 10px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+  line-height: 1;
+}
+
+/* 攻击按钮样式 */
+#btnAttack {
+  background: rgba(220, 50, 50, 0.6) !important;
+  border-color: rgba(255, 100, 100, 0.4) !important;
+}
+
+/* ============================================
+   武器第一人称渲染叠加
+   ============================================ */
+
+#weaponOverlay {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 320px;
+  height: 320px;
+  pointer-events: none;
+  z-index: 15;
+}
+
+/* ============================================
+   伤害指示器
+   ============================================ */
+
+.damage-indicator {
+  position: fixed;
+  color: #ff4444;
+  font-size: 20px;
+  font-weight: bold;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+  pointer-events: none;
+  z-index: 100;
+  animation: damageFloat 1s ease-out forwards;
+}
+
+@keyframes damageFloat {
+  0% { opacity: 1; transform: translateY(0) scale(1.2); }
+  100% { opacity: 0; transform: translateY(-40px) scale(0.8); }
+}
+
+/* 方块裂纹叠加 */
+.block-crack {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.3) 2px,
+    rgba(0,0,0,0.3) 4px
+  );
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* ============================================
+   背包响应式
+   ============================================ */
+
+@media (max-width: 768px) {
+  #inventoryPanel {
+    min-width: 300px;
+    padding: 14px;
+  }
+
+  .inv-slot {
+    width: 36px;
+    height: 36px;
+  }
+
+  .inv-slot .inv-preview {
+    width: 22px;
+    height: 22px;
+  }
+
+  .inv-slot .inv-count {
+    font-size: 9px;
+  }
+
+  #inventoryGrid {
+    grid-template-columns: repeat(9, 1fr);
+    gap: 3px;
+  }
+}
+
+@media (max-width: 480px) {
+  #inventoryPanel {
+    min-width: 260px;
+    padding: 10px;
+  }
+
+  .inv-slot {
+    width: 30px;
+    height: 30px;
+  }
+
+  .inv-slot .inv-preview {
+    width: 18px;
+    height: 18px;
+  }
+}

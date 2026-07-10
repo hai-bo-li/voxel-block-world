@@ -8,7 +8,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>像素方块世界</title>
-  <link rel="stylesheet" href="/styles/main.css?v=2" />
+  <link rel="stylesheet" href="/styles/main.css?v=4" />
   <!-- 使用 importmap 引入 Three.js ES Module -->
   <script type="importmap">
   {
@@ -43,11 +43,13 @@
     <div class="controls-body">
       <div class="control-row"><span class="key">W A S D</span><span>移动</span></div>
       <div class="control-row"><span class="key">鼠标</span><span>视角旋转</span></div>
-      <div class="control-row"><span class="key">左键</span><span>放置方块</span></div>
+      <div class="control-row"><span class="key">左键</span><span>攻击/放置方块</span></div>
       <div class="control-row"><span class="key">右键</span><span>破坏方块</span></div>
       <div class="control-row"><span class="key">空格</span><span>跳跃</span></div>
-      <div class="control-row"><span class="key">1-6</span><span>选择方块</span></div>
-      <div class="control-row"><span class="key">滚轮</span><span>切换方块</span></div>
+      <div class="control-row"><span class="key">1-9</span><span>快捷栏切换</span></div>
+      <div class="control-row"><span class="key">E</span><span>打开/关闭背包</span></div>
+      <div class="control-row"><span class="key">R</span><span>装填弹药</span></div>
+      <div class="control-row"><span class="key">滚轮</span><span>切换物品</span></div>
       <div class="control-row"><span class="key">ESC</span><span>暂停</span></div>
     </div>
   </div>
@@ -74,10 +76,12 @@
       <div class="control-row"><span class="key">W A S D</span><span>移动</span></div>
       <div class="control-row"><span class="key">鼠标</span><span>视角旋转</span></div>
       <div class="control-row"><span class="key">空格</span><span>跳跃</span></div>
-      <div class="control-row"><span class="key">左键</span><span>放置方块</span></div>
+      <div class="control-row"><span class="key">左键</span><span>攻击/放置方块</span></div>
       <div class="control-row"><span class="key">右键</span><span>破坏方块</span></div>
-      <div class="control-row"><span class="key">1-6</span><span>选择方块</span></div>
-      <div class="control-row"><span class="key">滚轮</span><span>切换方块</span></div>
+      <div class="control-row"><span class="key">1-9</span><span>快捷栏切换</span></div>
+      <div class="control-row"><span class="key">E</span><span>打开背包</span></div>
+      <div class="control-row"><span class="key">R</span><span>装填弹药</span></div>
+      <div class="control-row"><span class="key">滚轮</span><span>切换物品</span></div>
       <div class="control-row"><span class="key">ESC</span><span>暂停</span></div>
       <div class="control-row"><span class="key">= / Ctrl+滚轮上</span><span>放大画面</span></div>
       <div class="control-row"><span class="key">- / Ctrl+滚轮下</span><span>缩小画面</span></div>
@@ -94,6 +98,7 @@
     <!-- 右侧操作按钮 -->
     <div id="actionButtons">
       <button id="btnJump" class="action-btn">跳</button>
+      <button id="btnAttack" class="action-btn">击</button>
       <button id="btnBreak" class="action-btn">拆</button>
       <button id="btnPlace" class="action-btn">放</button>
     </div>
@@ -101,7 +106,16 @@
     <div id="mobileHotbar"></div>
   </div>
 
+  <!-- 背包界面（E键打开） -->
+  <div id="inventoryScreen" style="display:none;">
+    <div id="inventoryPanel">
+      <div id="inventoryTitle">背包</div>
+      <div id="inventoryGrid"></div>
+      <div id="inventoryClose">按 E 或 ESC 关闭</div>
+    </div>
+  </div>
+
   <!-- 游戏主模块 -->
-  <script type="module" src="/js/game.js?v=3"></script>
+  <script type="module" src="/js/game.js?v=5"></script>
 </body>
 </html>
