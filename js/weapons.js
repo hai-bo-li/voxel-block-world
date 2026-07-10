@@ -477,6 +477,29 @@ export class WeaponManager {
     this.renderer.setWeapon(weaponType);
   }
 
+  /** 射击（从game.js调用） */
+  shoot(weaponType, player) {
+    if (this.cooldownTimer > 0) return;
+    const def = WeaponDefs[weaponType];
+    if (!def) return;
+    this.currentWeapon = weaponType;
+    this.renderer.setWeapon(weaponType);
+    this.cooldownTimer = def.cooldown;
+    this._rangedAttack(def, player.yaw, player.pitch);
+    this._updateHotbarCallback?.();
+  }
+
+  /** 近战攻击（从game.js调用） */
+  meleeAttack(weaponType, player) {
+    if (this.cooldownTimer > 0) return;
+    const def = WeaponDefs[weaponType];
+    if (!def) return;
+    this.currentWeapon = weaponType;
+    this.renderer.setWeapon(weaponType);
+    this.cooldownTimer = def.cooldown;
+    this._meleeAttack(def, player.yaw, player.pitch);
+  }
+
   /** 执行攻击（左键） */
   attack(playerYaw, playerPitch) {
     if (this.cooldownTimer > 0) return false;

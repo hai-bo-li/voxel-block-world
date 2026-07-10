@@ -506,6 +506,15 @@ class TouchController {
         }
       }
     });
+
+    // 鼠标释放：停止瞄准
+    document.addEventListener('mouseup', (e) => {
+      if (e.button === 2 && this.isAiming) {
+        this.isAiming = false;
+        this.camera.fov = this.fov;
+        this.camera.updateProjectionMatrix();
+      }
+    });
     canvas.addEventListener('touchcancel', (e) => {
       for (let i = 0; i < e.changedTouches.length; i++) {
         if (e.changedTouches[i].identifier === this._lookTouchId) {
@@ -634,6 +643,10 @@ class Game {
     this.frameCount = 0;
     this.fpsTime = 0;
     this.fps = 0;
+
+    // 武器与瞄准
+    this.isAiming = false;
+    this.baseFOV = 75;
 
     // UI 元素
     this.ui = {
@@ -796,7 +809,7 @@ class Game {
     this.fovMin = 15;
     this.fovMax = 130;
     this.camera = new THREE.PerspectiveCamera(
-      this.fov, window.innerWidth / window.innerHeight, 0.1, 1000
+      this.baseFOV, window.innerWidth / window.innerHeight, 0.1, 1000
     );
   }
 
@@ -1049,9 +1062,14 @@ class Game {
           this.player.placeBlock();
         }
       } else if (e.button === 2) {
-        // 右键：武器次要功能 或 破坏方块
+        // 右键：武器瞄准 或 破坏方块
         if (currentItem && currentItem.type === 'weapon') {
-          // 近战武器右键格挡（暂无实现，保留）
+          const wDef = WeaponDefs[currentItem.weaponType];
+          if (wDef && wDef.type === 'ranged') {
+            this.isAiming = true;
+            this.camera.fov = this.fov * 0.67; // 瞄准缩放
+            this.camera.updateProjectionMatrix();
+          }
         } else {
           this.player.breakBlock();
         }
@@ -1207,13 +1225,12 @@ class Game {
     if (wDef.category === 'ranged') {
       // 远程武器：检查弹药
       const ammoType = weaponType === WeaponType.PISTOL ? 'pistol' : 'rifle';
-      const ammoSlot = this.inventory.findAmmo(ammoType);
-      if (ammoSlot === -1) {
+      if (!this.inventory.hasAmmo(ammoType, 1)) {
         this._showHint('没有弹药！');
         return;
       }
       // 消耗弹药
-      this.inventory.consumeAmmo(ammoSlot);
+      this.inventory.consumeAmmo(ammoType, 1);
       // 射击
       this.weaponManager.shoot(weaponType, this.player);
     } else {
@@ -1222,7 +1239,6 @@ class Game {
     }
 
     // 刷新快捷栏显示
-    this._initHotbar();
     this._updateHotbar();
   }
 
@@ -1235,8 +1251,7 @@ class Game {
     if (!wDef || wDef.category !== 'ranged') return;
 
     const ammoType = currentItem.weaponType === WeaponType.PISTOL ? 'pistol' : 'rifle';
-    const ammoSlot = this.inventory.findAmmo(ammoType);
-    if (ammoSlot === -1) {
+    if (!this.inventory.hasAmmo(ammoType, 1)) {
       this._showHint('没有弹药！');
     } else {
       this._showHint('装填完成');
@@ -1298,8 +1313,12 @@ class Game {
       const wDef = WeaponDefs[currentItem.weaponType];
       if (wDef && wDef.category === 'ranged') {
         const ammoType = currentItem.weaponType === WeaponType.PISTOL ? 'pistol' : 'rifle';
-        const ammoSlot = this.inventory.findAmmo(ammoType);
-        const ammoCount = ammoSlot !== -1 ? this.inventory.slots[ammoSlot].count : 0;
+        let ammoCount = 0;
+        for (const slot of this.inventory.slots) {
+          if (slot && slot.type === 'ammo' && slot.ammoType === ammoType) {
+            ammoCount += slot.count;
+          }
+        }
         weaponInfo = `<br>武器: ${wDef.name} | 弹药: ${ammoCount}`;
       } else if (wDef) {
         weaponInfo = `<br>武器: ${wDef.name}`;
