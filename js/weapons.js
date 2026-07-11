@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=12';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=13';
 
 /* ============================================
    武器类型定义
@@ -510,7 +510,9 @@ export class WeaponRenderer {
     this.weaponGroup.position.set(bobX, bobY - recoilZ * 0.3, -recoilZ);
     this.weaponGroup.rotation.set(-swingAngle * 0.5, 0, -swingAngle * 0.3);
 
-    this.camera.add(this.weaponGroup);
+    if (!this.weaponGroup.parent) {
+      this.camera.add(this.weaponGroup);
+    }
   }
 }
 

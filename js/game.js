@@ -8,12 +8,12 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=12';
-import { AnimalManager } from './animals.js?v=12';
+} from './voxel.js?v=13';
+import { AnimalManager } from './animals.js?v=13';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=12';
+} from './weapons.js?v=13';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -824,6 +824,7 @@ class Game {
     this.camera = new THREE.PerspectiveCamera(
       this.baseFOV, window.innerWidth / window.innerHeight, 0.1, 1000
     );
+    this.scene.add(this.camera);
 
     // 保存相机引用到场景，供怪物血条面向相机使用
     this.scene.userData.camera = this.camera;
