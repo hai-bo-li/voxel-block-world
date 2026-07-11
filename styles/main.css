@@ -865,3 +865,240 @@ html, body {
     height: 18px;
   }
 }
+
+/* ============================================
+   玩家血条 HUD
+   ============================================ */
+
+#healthBar {
+  position: fixed;
+  bottom: 80px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.health-icon {
+  font-size: 20px;
+  color: #F44336;
+  text-shadow: 0 0 6px rgba(244, 67, 54, 0.6);
+  line-height: 1;
+}
+
+.health-track {
+  width: 140px;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.health-fill {
+  height: 100%;
+  width: 100%;
+  background: #4CAF50;
+  border-radius: 5px;
+  transition: width 0.25s ease-out, background 0.3s;
+}
+
+.health-text {
+  font-size: 14px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  min-width: 28px;
+}
+
+/* ============================================
+   换弹进度条
+   ============================================ */
+
+#reloadBar {
+  position: fixed;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.reload-label {
+  font-size: 13px;
+  color: #FFD54F;
+  font-weight: bold;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  white-space: nowrap;
+}
+
+.reload-track {
+  width: 120px;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.reload-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #FFD54F, #FF9800);
+  border-radius: 4px;
+  transition: width 0.08s linear;
+  box-shadow: 0 0 6px rgba(255, 213, 79, 0.4);
+}
+
+/* ============================================
+   弹药 HUD
+   ============================================ */
+
+#ammoHUD {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  display: block;
+  z-index: 12;
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  font-size: 18px;
+  font-weight: bold;
+  color: #fff;
+  letter-spacing: 1px;
+}
+
+#ammoHUD .ammo-mag {
+  font-size: 26px;
+  color: #E0E0E0;
+}
+
+#ammoHUD .ammo-sep {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 18px;
+  margin: 0 2px;
+}
+
+#ammoHUD .ammo-max {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+#ammoHUD .ammo-reserve {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ============================================
+   受击红色叠加
+   ============================================ */
+
+#hitOverlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(255, 0, 0, 0.5) 100%);
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+
+/* ============================================
+   死亡界面
+   ============================================ */
+
+#deathScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(80, 0, 0, 0.6);
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.death-title {
+  font-size: 56px;
+  font-weight: 900;
+  color: #F44336;
+  text-shadow:
+    0 0 20px rgba(244, 67, 54, 0.8),
+    0 0 60px rgba(244, 67, 54, 0.4),
+    3px 3px 0 #7f0000;
+  letter-spacing: 6px;
+  margin-bottom: 20px;
+  animation: deathPulse 1.5s ease-in-out infinite;
+}
+
+.death-hint {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.8);
+  animation: hintBlink 2s ease-in-out infinite;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+}
+
+@keyframes deathPulse {
+  0%, 100% { text-shadow: 0 0 20px rgba(244,67,54,0.5), 3px 3px 0 #7f0000; }
+  50% { text-shadow: 0 0 40px rgba(244,67,54,0.8), 3px 3px 0 #7f0000; }
+}
+
+/* ============================================
+   HUD 响应式适配
+   ============================================ */
+
+@media (max-width: 768px) {
+  #healthBar {
+    bottom: 62px;
+    left: 10px;
+  }
+
+  .health-track {
+    width: 100px;
+    height: 8px;
+  }
+
+  .health-icon {
+    font-size: 16px;
+  }
+
+  .health-text {
+    font-size: 12px;
+  }
+
+  #ammoHUD {
+    bottom: 62px;
+    right: 10px;
+    font-size: 14px;
+  }
+
+  #ammoHUD .ammo-mag {
+    font-size: 20px;
+  }
+
+  #reloadBar {
+    bottom: 110px;
+  }
+
+  .reload-track {
+    width: 90px;
+    height: 6px;
+  }
+
+  .reload-label {
+    font-size: 11px;
+  }
+
+  .death-title {
+    font-size: 36px;
+    letter-spacing: 3px;
+  }
+}

@@ -1,6 +1,6 @@
 /**
  * 像素方块世界 - 武器系统
- * 包含：武器定义、子弹系统、近战攻击、第一人称武器渲染、伤害计算
+ * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
 import { BlockType, isSolid, CHUNK_HEIGHT } from './voxel.js';
@@ -12,8 +12,10 @@ export const WeaponType = {
   FIST: 'fist',
   SWORD: 'sword',
   AXE: 'axe',
+  PICKAXE: 'pickaxe',
   PISTOL: 'pistol',
   RIFLE: 'rifle',
+  SHOTGUN: 'shotgun',
 };
 
 /** 武器属性配置 */
@@ -45,6 +47,15 @@ export const WeaponDefs = {
     blockDamage: 4,
     color: 0x8D6E63,
   },
+  [WeaponType.PICKAXE]: {
+    name: '镐',
+    type: 'melee',
+    damage: 3,
+    range: 4,
+    cooldown: 0.3,
+    blockDamage: 6,
+    color: 0x78909C,
+  },
   [WeaponType.PISTOL]: {
     name: '激光手枪',
     type: 'ranged',
@@ -56,6 +67,11 @@ export const WeaponDefs = {
     bulletColor: 0xFFEB3B,
     bulletSize: 0.08,
     recoil: 0.02,
+    magSize: 12,
+    reloadTime: 1.5,
+    ammoType: 'pistol',
+    spread: 0.01,
+    bodyColor: 0x546E7A,
   },
   [WeaponType.RIFLE]: {
     name: '等离子步枪',
@@ -68,6 +84,29 @@ export const WeaponDefs = {
     bulletColor: 0x00E5FF,
     bulletSize: 0.1,
     recoil: 0.015,
+    magSize: 30,
+    reloadTime: 2.0,
+    ammoType: 'rifle',
+    spread: 0.02,
+    bodyColor: 0x37474F,
+  },
+  [WeaponType.SHOTGUN]: {
+    name: '霰弹枪',
+    type: 'ranged',
+    damage: 3,
+    range: 25,
+    cooldown: 0.8,
+    blockDamage: 1,
+    bulletSpeed: 60,
+    bulletColor: 0xFF6D00,
+    bulletSize: 0.06,
+    recoil: 0.05,
+    magSize: 6,
+    reloadTime: 2.5,
+    ammoType: 'shotgun',
+    pellets: 5,
+    spread: 0.08,
+    bodyColor: 0x4E342E,
   },
 };
 
@@ -102,14 +141,12 @@ class Bullet {
     this.age = 0;
     this.maxAge = weaponDef.range / weaponDef.bulletSpeed + 0.5;
 
-    // 子弹网格
     const size = weaponDef.bulletSize || 0.1;
     const geo = new THREE.BoxGeometry(size, size, size * 3);
     const mat = new THREE.MeshBasicMaterial({ color: weaponDef.bulletColor });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.position.copy(origin);
 
-    // 子弹朝向运动方向
     this.velocity = direction.clone().multiplyScalar(weaponDef.bulletSpeed);
     this.mesh.lookAt(
       origin.x + direction.x,
@@ -138,7 +175,6 @@ class Bullet {
       return;
     }
 
-    // 移动子弹
     const moveVec = this.velocity.clone().multiplyScalar(dt);
     this.mesh.position.add(moveVec);
 
@@ -150,7 +186,6 @@ class Bullet {
     if (by >= 0 && by < CHUNK_HEIGHT) {
       const block = world.getBlock(bx, by, bz);
       if (isSolid(block)) {
-        // 对方块造成伤害
         this._hitBlock(world, bx, by, bz, block);
         this.destroy();
         return;
@@ -162,8 +197,8 @@ class Bullet {
       for (const animal of animalManager.animals) {
         if (!animal.alive) continue;
         const dist = this.mesh.position.distanceTo(animal.position);
-        if (dist < 0.8) {
-          animal.takeDamage(this.weaponDef.damage);
+        if (dist < 1.2) {
+          animal.takeDamage(this.weaponDef.damage, { position: this.mesh.position.clone() });
           this.destroy();
           return;
         }
@@ -178,9 +213,8 @@ class Bullet {
 
   _hitBlock(world, x, y, z, blockType) {
     const maxHP = getBlockMaxHP(blockType);
-    if (maxHP >= 999) return; // 水不可破坏
+    if (maxHP >= 999) return;
 
-    // 获取/创建方块伤害记录
     if (!world.blockDamage) world.blockDamage = {};
     const key = `${x},${y},${z}`;
     if (!world.blockDamage[key]) {
@@ -188,21 +222,16 @@ class Bullet {
     }
 
     world.blockDamage[key].hp -= this.weaponDef.blockDamage;
-
-    // 创建击中粒子效果
     this._spawnHitParticles(x, y, z, blockType);
 
     if (world.blockDamage[key].hp <= 0) {
-      // 方块被摧毁
       world.setBlock(x, y, z, BlockType.AIR);
       delete world.blockDamage[key];
-      // 摧毁粒子
       this._spawnBreakParticles(x, y, z, blockType);
     }
   }
 
   _spawnHitParticles(x, y, z, blockType) {
-    // 简单的粒子效果：创建几个小方块向外飞散
     const color = _getBlockParticleColor(blockType);
     for (let i = 0; i < 4; i++) {
       const size = 0.08 + Math.random() * 0.06;
@@ -220,7 +249,6 @@ class Bullet {
       particle._vel = vel;
       particle._life = 0.5 + Math.random() * 0.3;
 
-      // 添加到临时粒子列表
       if (!this.scene._particles) this.scene._particles = [];
       this.scene._particles.push(particle);
     }
@@ -272,6 +300,39 @@ function _getBlockParticleColor(blockType) {
 }
 
 /* ============================================
+   受击特效工具
+   ============================================ */
+export function spawnHitEffect(scene, position, color) {
+  // 受击粒子爆炸
+  for (let i = 0; i < 8; i++) {
+    const size = 0.06 + Math.random() * 0.08;
+    const geo = new THREE.BoxGeometry(size, size, size);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+    const particle = new THREE.Mesh(geo, mat);
+    particle.position.copy(position);
+    scene.add(particle);
+
+    const vel = new THREE.Vector3(
+      (Math.random() - 0.5) * 8,
+      Math.random() * 4 + 1,
+      (Math.random() - 0.5) * 8
+    );
+    particle._vel = vel;
+    particle._life = 0.3 + Math.random() * 0.3;
+
+    if (!scene._particles) scene._particles = [];
+    scene._particles.push(particle);
+  }
+}
+
+/** 创建击退力 */
+export function computeKnockback(hitPos, fromPos, strength) {
+  const dir = new THREE.Vector3().subVectors(hitPos, fromPos).normalize();
+  dir.y = 0.3; // 向上偏移一点
+  return dir.multiplyScalar(strength);
+}
+
+/* ============================================
    武器渲染器 - 第一人称手持武器
    ============================================ */
 export class WeaponRenderer {
@@ -280,10 +341,10 @@ export class WeaponRenderer {
     this.scene = scene;
     this.currentWeapon = null;
     this.weaponGroup = new THREE.Group();
-    this.weaponGroup.renderOrder = 999; // 始终在最前面渲染
-    this.swingPhase = 0;    // 近战挥动动画
-    this.recoilPhase = 0;   // 后坐力动画
-    this.bobPhase = 0;      // 行走晃动
+    this.weaponGroup.renderOrder = 999;
+    this.swingPhase = 0;
+    this.recoilPhase = 0;
+    this.bobPhase = 0;
   }
 
   /** 切换武器 */
@@ -310,7 +371,6 @@ export class WeaponRenderer {
   /** 构建拳头模型 */
   _buildFist() {
     const mat = new THREE.MeshLambertMaterial({ color: 0xD4A574 });
-    // 手掌
     const palm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.16), mat);
     palm.position.set(0.35, -0.32, -0.45);
     this.weaponGroup.add(palm);
@@ -322,84 +382,97 @@ export class WeaponRenderer {
     const handleMat = new THREE.MeshLambertMaterial({ color: 0x5D4037 });
 
     if (weaponType === WeaponType.SWORD) {
-      // 剑柄
       const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), handleMat);
       handle.position.set(0.35, -0.28, -0.48);
       this.weaponGroup.add(handle);
-      // 护手
       const guard = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.03, 0.04), mat);
       guard.position.set(0.35, -0.2, -0.48);
       this.weaponGroup.add(guard);
-      // 剑身
       const blade = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.4, 0.04), mat);
       blade.position.set(0.35, 0.0, -0.48);
       this.weaponGroup.add(blade);
-      // 剑尖
-      const tip = new THREE.Mesh(
-        new THREE.ConeGeometry(0.028, 0.08, 4),
-        mat
-      );
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.08, 4), mat);
       tip.position.set(0.35, 0.22, -0.48);
-      tip.rotation.z = Math.PI; // 尖端朝上
+      tip.rotation.z = Math.PI;
       this.weaponGroup.add(tip);
     } else if (weaponType === WeaponType.AXE) {
-      // 斧柄
       const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.45, 0.04), handleMat);
       handle.position.set(0.35, -0.15, -0.48);
       this.weaponGroup.add(handle);
-      // 斧头
       const axeHead = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.04), mat);
       axeHead.position.set(0.38, 0.08, -0.48);
       this.weaponGroup.add(axeHead);
+    } else if (weaponType === WeaponType.PICKAXE) {
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), handleMat);
+      handle.position.set(0.35, -0.15, -0.48);
+      this.weaponGroup.add(handle);
+      const pickHead = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.04), mat);
+      pickHead.position.set(0.35, 0.1, -0.48);
+      this.weaponGroup.add(pickHead);
+      const pickPoint = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.04), mat);
+      pickPoint.position.set(0.47, 0.12, -0.48);
+      this.weaponGroup.add(pickPoint);
     }
   }
 
   /** 构建远程武器模型 */
   _buildRangedWeapon(weaponType, def) {
-    const mat = new THREE.MeshLambertMaterial({ color: def.color });
-    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x424242 });
+    const bodyColor = def.bodyColor || 0x424242;
+    const mat = new THREE.MeshLambertMaterial({ color: bodyColor });
+    const accentMat = new THREE.MeshLambertMaterial({ color: def.bulletColor });
 
     if (weaponType === WeaponType.PISTOL) {
-      // 枪身
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.28), bodyMat);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.28), mat);
       body.position.set(0.35, -0.3, -0.5);
       this.weaponGroup.add(body);
-      // 枪管
-      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.12), mat);
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.12), accentMat);
       barrel.position.set(0.35, -0.27, -0.62);
       this.weaponGroup.add(barrel);
-      // 握把
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.05), bodyMat);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.05), mat);
       grip.position.set(0.35, -0.38, -0.44);
       grip.rotation.x = 0.3;
       this.weaponGroup.add(grip);
-      // 发光点（枪口）
       const glowMat = new THREE.MeshBasicMaterial({ color: def.bulletColor });
       const glow = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), glowMat);
       glow.position.set(0.35, -0.27, -0.68);
       this.weaponGroup.add(glow);
     } else if (weaponType === WeaponType.RIFLE) {
-      // 枪身
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.5), bodyMat);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.5), mat);
       body.position.set(0.35, -0.3, -0.55);
       this.weaponGroup.add(body);
-      // 枪管
-      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.18), mat);
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.18), accentMat);
       barrel.position.set(0.35, -0.27, -0.78);
       this.weaponGroup.add(barrel);
-      // 弹匣
-      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.06), mat);
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.06), accentMat);
       mag.position.set(0.35, -0.4, -0.52);
       this.weaponGroup.add(mag);
-      // 瞄准器
-      const sight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.03), bodyMat);
+      const sight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.03), mat);
       sight.position.set(0.35, -0.22, -0.52);
       this.weaponGroup.add(sight);
-      // 发光点
       const glowMat = new THREE.MeshBasicMaterial({ color: def.bulletColor });
       const glow = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), glowMat);
       glow.position.set(0.35, -0.27, -0.87);
       this.weaponGroup.add(glow);
+    } else if (weaponType === WeaponType.SHOTGUN) {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.4), mat);
+      body.position.set(0.35, -0.3, -0.48);
+      this.weaponGroup.add(body);
+      // 粗枪管
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.2), mat);
+      barrel.position.set(0.35, -0.28, -0.7);
+      this.weaponGroup.add(barrel);
+      // 枪口
+      const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.03), accentMat);
+      muzzle.position.set(0.35, -0.28, -0.81);
+      this.weaponGroup.add(muzzle);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.05), mat);
+      grip.position.set(0.35, -0.4, -0.38);
+      grip.rotation.x = 0.25;
+      this.weaponGroup.add(grip);
+      // 泵动护木
+      const pump = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.12), new THREE.MeshLambertMaterial({ color: 0x5D4037 }));
+      pump.position.set(0.35, -0.32, -0.58);
+      this.weaponGroup.add(pump);
     }
   }
 
@@ -415,7 +488,6 @@ export class WeaponRenderer {
 
   /** 每帧更新武器动画 */
   update(dt, isMoving) {
-    // 行走晃动
     if (isMoving) {
       this.bobPhase += dt * 8;
     } else {
@@ -424,30 +496,26 @@ export class WeaponRenderer {
     const bobX = Math.sin(this.bobPhase) * (isMoving ? 0.015 : 0.003);
     const bobY = Math.abs(Math.cos(this.bobPhase)) * (isMoving ? 0.012 : 0.002);
 
-    // 挥动动画衰减
     if (this.swingPhase > 0) {
       this.swingPhase = Math.max(0, this.swingPhase - dt * 6);
     }
 
-    // 后坐力衰减
     if (this.recoilPhase > 0) {
       this.recoilPhase = Math.max(0, this.recoilPhase - dt * 8);
     }
 
-    // 计算武器组变换
     const swingAngle = this.swingPhase * Math.PI * 0.6;
     const recoilZ = this.recoilPhase * 0.08;
 
     this.weaponGroup.position.set(bobX, bobY - recoilZ * 0.3, -recoilZ);
     this.weaponGroup.rotation.set(-swingAngle * 0.5, 0, -swingAngle * 0.3);
 
-    // 武器组跟随相机
     this.camera.add(this.weaponGroup);
   }
 }
 
 /* ============================================
-   武器管理器 - 统管武器使用、子弹生命周期
+   武器管理器 - 统管武器使用、子弹生命周期、弹药、换弹
    ============================================ */
 export class WeaponManager {
   constructor(scene, camera, world, animalManager) {
@@ -460,6 +528,20 @@ export class WeaponManager {
     this.currentWeapon = WeaponType.FIST;
     this.cooldownTimer = 0;
 
+    // 弹药系统
+    this.currentAmmo = {};   // 武器类型 -> 当前弹匣剩余
+    this.isReloading = false;
+    this.reloadTimer = 0;
+    this.reloadDuration = 0;
+    this.reloadingWeaponType = null;
+
+    // 初始化弹匣
+    for (const [key, def] of Object.entries(WeaponDefs)) {
+      if (def.type === 'ranged' && def.magSize) {
+        this.currentAmmo[key] = def.magSize;
+      }
+    }
+
     // 活跃子弹列表
     this.bullets = [];
 
@@ -468,6 +550,11 @@ export class WeaponManager {
 
     // 设置默认武器
     this.renderer.setWeapon(WeaponType.FIST);
+
+    // 换弹进度回调
+    this.onReloadProgress = null;
+    this.onReloadComplete = null;
+    this.onAmmoChanged = null;
   }
 
   /** 切换当前武器 */
@@ -475,34 +562,79 @@ export class WeaponManager {
     if (this.currentWeapon === weaponType) return;
     this.currentWeapon = weaponType;
     this.renderer.setWeapon(weaponType);
+    // 切换武器时取消换弹
+    if (this.isReloading) {
+      this.isReloading = false;
+      this.reloadTimer = 0;
+    }
+    this.onAmmoChanged?.();
   }
 
   /** 射击（从game.js调用） */
   shoot(weaponType, player) {
     if (this.cooldownTimer > 0) return;
+    if (this.isReloading) return;
+
     const def = WeaponDefs[weaponType];
-    if (!def) return;
+    if (!def || def.type !== 'ranged') return;
+
+    // 检查弹匣
+    const ammo = this.currentAmmo[weaponType] ?? 0;
+    if (ammo <= 0) {
+      this.startReload(weaponType);
+      return;
+    }
+
     this.currentWeapon = weaponType;
     this.renderer.setWeapon(weaponType);
     this.cooldownTimer = def.cooldown;
-    this._rangedAttack(def, player.yaw, player.pitch);
-    this._updateHotbarCallback?.();
+
+    // 消耗弹药
+    this.currentAmmo[weaponType] = ammo - 1;
+    this.onAmmoChanged?.();
+
+    // 霰弹枪散射
+    const pellets = def.pellets || 1;
+    for (let p = 0; p < pellets; p++) {
+      this._rangedAttack(def, player.yaw, player.pitch);
+    }
+
+    // 弹匣打空自动换弹
+    if (this.currentAmmo[weaponType] <= 0) {
+      this.startReload(weaponType);
+    }
+  }
+
+  /** 开始换弹 */
+  startReload(weaponType) {
+    const def = WeaponDefs[weaponType];
+    if (!def || def.type !== 'ranged') return;
+    if (this.isReloading) return;
+    if (this.currentAmmo[weaponType] >= def.magSize) return;
+
+    this.isReloading = true;
+    this.reloadingWeaponType = weaponType;
+    this.reloadDuration = def.reloadTime;
+    this.reloadTimer = 0;
   }
 
   /** 近战攻击（从game.js调用） */
   meleeAttack(weaponType, player) {
     if (this.cooldownTimer > 0) return;
+    if (this.isReloading) return;
     const def = WeaponDefs[weaponType];
     if (!def) return;
     this.currentWeapon = weaponType;
     this.renderer.setWeapon(weaponType);
     this.cooldownTimer = def.cooldown;
     this._meleeAttack(def, player.yaw, player.pitch);
+    this.onAmmoChanged?.();
   }
 
   /** 执行攻击（左键） */
   attack(playerYaw, playerPitch) {
     if (this.cooldownTimer > 0) return false;
+    if (this.isReloading) return false;
 
     const def = WeaponDefs[this.currentWeapon];
     if (!def) return false;
@@ -520,7 +652,6 @@ export class WeaponManager {
   _meleeAttack(def, yaw, pitch) {
     this.renderer.triggerSwing();
 
-    // 计算视线方向
     const dir = new THREE.Vector3(
       -Math.sin(yaw) * Math.cos(pitch),
       Math.sin(pitch),
@@ -529,7 +660,6 @@ export class WeaponManager {
 
     const origin = this.camera.position.clone();
 
-    // 步进检测碰撞
     const step = 0.1;
     const maxSteps = def.range / step;
     let prevX = Math.floor(origin.x);
@@ -544,21 +674,19 @@ export class WeaponManager {
 
       if (x === prevX && y === prevY && z === prevZ) continue;
 
-      // 检测方块碰撞
       const block = this.world.getBlock(x, y, z);
       if (isSolid(block)) {
         this._damageBlock(x, y, z, block, def.blockDamage);
         return true;
       }
 
-      // 检测生物碰撞
       if (this.animalManager) {
         const hitPos = new THREE.Vector3(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t);
         for (const animal of this.animalManager.animals) {
           if (!animal.alive) continue;
           const dist = hitPos.distanceTo(animal.position);
-          if (dist < 1.0) {
-            animal.takeDamage(def.damage);
+          if (dist < 1.2) {
+            animal.takeDamage(def.damage, { position: this.camera.position.clone() });
             return true;
           }
         }
@@ -569,7 +697,7 @@ export class WeaponManager {
       prevZ = z;
     }
 
-    return true; // 挥空了也算一次攻击
+    return true;
   }
 
   /** 远程攻击 */
@@ -582,7 +710,14 @@ export class WeaponManager {
       -Math.cos(yaw) * Math.cos(pitch)
     ).normalize();
 
-    // 枪口位置（相机前方偏移）
+    // 添加散布
+    if (def.spread) {
+      dir.x += (Math.random() - 0.5) * def.spread;
+      dir.y += (Math.random() - 0.5) * def.spread;
+      dir.z += (Math.random() - 0.5) * def.spread;
+      dir.normalize();
+    }
+
     const origin = this.camera.position.clone().add(dir.clone().multiplyScalar(0.5));
 
     const bullet = new Bullet(this.scene, origin, dir, def, 'player');
@@ -603,8 +738,6 @@ export class WeaponManager {
     }
 
     this.world.blockDamage[key].hp -= damage;
-
-    // 击中粒子
     this._spawnHitParticles(x, y, z, blockType);
 
     if (this.world.blockDamage[key].hp <= 0) {
@@ -658,11 +791,43 @@ export class WeaponManager {
     }
   }
 
+  /** 获取换弹进度 0~1 */
+  getReloadProgress() {
+    if (!this.isReloading) return 0;
+    return Math.min(1, this.reloadTimer / this.reloadDuration);
+  }
+
+  /** 获取当前弹匣信息 */
+  getAmmoInfo(weaponType) {
+    const def = WeaponDefs[weaponType];
+    if (!def || def.type !== 'ranged') return null;
+    return {
+      current: this.currentAmmo[weaponType] ?? 0,
+      max: def.magSize,
+    };
+  }
+
   /** 每帧更新 */
   update(dt, isMoving) {
     // 冷却计时
     if (this.cooldownTimer > 0) {
       this.cooldownTimer = Math.max(0, this.cooldownTimer - dt);
+    }
+
+    // 换弹计时
+    if (this.isReloading) {
+      this.reloadTimer += dt;
+      this.onReloadProgress?.(this.getReloadProgress());
+
+      if (this.reloadTimer >= this.reloadDuration) {
+        // 换弹完成
+        const def = WeaponDefs[this.reloadingWeaponType];
+        this.currentAmmo[this.reloadingWeaponType] = def.magSize;
+        this.isReloading = false;
+        this.reloadTimer = 0;
+        this.onReloadComplete?.();
+        this.onAmmoChanged?.();
+      }
     }
 
     // 更新子弹
@@ -688,7 +853,7 @@ export class WeaponManager {
           continue;
         }
         p.position.add(p._vel.clone().multiplyScalar(dt));
-        p._vel.y -= 15 * dt; // 重力
+        p._vel.y -= 15 * dt;
         p.material.opacity = Math.max(0, p._life * 2);
         p.material.transparent = true;
       }
@@ -704,20 +869,14 @@ export class WeaponManager {
    ============================================ */
 export class Inventory {
   constructor() {
-    // 背包格子 (6行 x 9列 = 54格)
     this.rows = 6;
     this.cols = 9;
     this.slots = new Array(this.rows * this.cols).fill(null);
-
-    // 快捷栏映射（底部第一行 = 前9格）
     this.selectedSlot = 0;
-
-    // 初始物品
     this._initStarterItems();
   }
 
   _initStarterItems() {
-    // 快捷栏初始物品
     const starterItems = [
       { type: 'block', blockType: BlockType.GRASS, count: 64 },
       { type: 'block', blockType: BlockType.DIRT, count: 64 },
@@ -734,40 +893,35 @@ export class Inventory {
       this.slots[i] = { ...item };
     });
 
-    // 额外物品放第二行
     this.slots[9] = { type: 'weapon', weaponType: WeaponType.RIFLE, count: 1 };
-    // 弹药
-    this.slots[10] = { type: 'ammo', ammoType: 'pistol', count: 120 };
-    this.slots[11] = { type: 'ammo', ammoType: 'rifle', count: 300 };
+    this.slots[10] = { type: 'weapon', weaponType: WeaponType.SHOTGUN, count: 1 };
+    this.slots[11] = { type: 'weapon', weaponType: WeaponType.PICKAXE, count: 1 };
+    this.slots[12] = { type: 'ammo', ammoType: 'pistol', count: 120 };
+    this.slots[13] = { type: 'ammo', ammoType: 'rifle', count: 300 };
+    this.slots[14] = { type: 'ammo', ammoType: 'shotgun', count: 60 };
   }
 
-  /** 获取快捷栏物品 (0-8) */
   getHotbarItem(index) {
     return this.slots[index];
   }
 
-  /** 获取当前选中的快捷栏物品 */
   getCurrentItem() {
     return this.slots[this.selectedSlot];
   }
 
-  /** 切换快捷栏选中 */
   selectSlot(index) {
     if (index >= 0 && index < this.cols) {
       this.selectedSlot = index;
     }
   }
 
-  /** 交换两个背包格子的物品 */
   swapSlots(from, to) {
     const temp = this.slots[from];
     this.slots[from] = this.slots[to];
     this.slots[to] = temp;
   }
 
-  /** 添加物品到背包（找空位或同类堆叠） */
   addItem(item) {
-    // 先尝试堆叠
     for (let i = 0; i < this.slots.length; i++) {
       const slot = this.slots[i];
       if (slot && slot.type === item.type) {
@@ -781,43 +935,37 @@ export class Inventory {
         }
       }
     }
-    // 找空位
     for (let i = 0; i < this.slots.length; i++) {
       if (!this.slots[i]) {
         this.slots[i] = { ...item };
         return true;
       }
     }
-    return false; // 背包满了
+    return false;
   }
 
-  /** 判断当前选中的是否是武器 */
   isCurrentWeapon() {
     const item = this.getCurrentItem();
     return item && item.type === 'weapon';
   }
 
-  /** 判断当前选中的是否是方块 */
   isCurrentBlock() {
     const item = this.getCurrentItem();
     return item && item.type === 'block';
   }
 
-  /** 获取当前武器的类型 */
   getCurrentWeaponType() {
     const item = this.getCurrentItem();
     if (item && item.type === 'weapon') return item.weaponType;
     return WeaponType.FIST;
   }
 
-  /** 获取当前方块类型 */
   getCurrentBlockType() {
     const item = this.getCurrentItem();
     if (item && item.type === 'block') return item.blockType;
     return null;
   }
 
-  /** 消耗一个当前选中方块 */
   consumeCurrentBlock() {
     const item = this.getCurrentItem();
     if (item && item.type === 'block' && item.count > 0) {
@@ -830,7 +978,6 @@ export class Inventory {
     return false;
   }
 
-  /** 消耗弹药 */
   consumeAmmo(ammoType, amount) {
     for (let i = 0; i < this.slots.length; i++) {
       const slot = this.slots[i];
@@ -845,7 +992,6 @@ export class Inventory {
     return false;
   }
 
-  /** 检查是否有弹药 */
   hasAmmo(ammoType, amount) {
     for (const slot of this.slots) {
       if (slot && slot.type === 'ammo' && slot.ammoType === ammoType && slot.count >= amount) {
@@ -853,6 +999,17 @@ export class Inventory {
       }
     }
     return false;
+  }
+
+  /** 获取弹药类型的总数量 */
+  getAmmoCount(ammoType) {
+    let total = 0;
+    for (const slot of this.slots) {
+      if (slot && slot.type === 'ammo' && slot.ammoType === ammoType) {
+        total += slot.count;
+      }
+    }
+    return total;
   }
 }
 
@@ -865,7 +1022,6 @@ export class InventoryUI {
     this.isOpen = false;
     this.dragFrom = -1;
 
-    // 创建DOM
     this.container = document.createElement('div');
     this.container.id = 'inventoryPanel';
     this.container.style.display = 'none';
@@ -878,13 +1034,11 @@ export class InventoryUI {
     this.container.innerHTML = '';
     this.container.className = 'inventory-panel';
 
-    // 标题
     const title = document.createElement('div');
     title.className = 'inv-title';
     title.textContent = '背包';
     this.container.appendChild(title);
 
-    // 快捷栏区域
     const hotbarSection = document.createElement('div');
     hotbarSection.className = 'inv-section';
     const hotbarLabel = document.createElement('div');
@@ -900,21 +1054,20 @@ export class InventoryUI {
     hotbarSection.appendChild(hotbarGrid);
     this.container.appendChild(hotbarSection);
 
-    // 背包区域
-    const bagSection = document.createElement('div');
-    bagSection.className = 'inv-section';
-    const bagLabel = document.createElement('div');
-    bagLabel.className = 'inv-section-label';
-    bagLabel.textContent = '背包';
-    bagSection.appendChild(bagLabel);
+    const backpackSection = document.createElement('div');
+    backpackSection.className = 'inv-section';
+    const bpLabel = document.createElement('div');
+    bpLabel.className = 'inv-section-label';
+    bpLabel.textContent = '背包';
+    backpackSection.appendChild(bpLabel);
 
-    const bagGrid = document.createElement('div');
-    bagGrid.className = 'inv-grid inv-bag-grid';
-    for (let i = this.inventory.cols; i < this.inventory.rows * this.inventory.cols; i++) {
-      bagGrid.appendChild(this._createSlot(i));
+    const bpGrid = document.createElement('div');
+    bpGrid.className = 'inv-grid inv-backpack-grid';
+    for (let i = this.inventory.cols; i < this.inventory.slots.length; i++) {
+      bpGrid.appendChild(this._createSlot(i));
     }
-    bagSection.appendChild(bagGrid);
-    this.container.appendChild(bagSection);
+    backpackSection.appendChild(bpGrid);
+    this.container.appendChild(backpackSection);
   }
 
   _createSlot(index) {
@@ -922,136 +1075,48 @@ export class InventoryUI {
     slot.className = 'inv-slot';
     slot.dataset.index = index;
 
-    // 快捷栏选中高亮
-    if (index === this.inventory.selectedSlot) {
-      slot.classList.add('selected');
-    }
-
     const item = this.inventory.slots[index];
     if (item) {
-      const icon = document.createElement('div');
-      icon.className = 'inv-item-icon';
-
-      if (item.type === 'block') {
-        icon.style.background = _getBlockCSSColor(item.blockType);
-        icon.title = _getBlockName(item.blockType);
-      } else if (item.type === 'weapon') {
-        icon.style.background = _getWeaponCSSColor(item.weaponType);
-        icon.title = WeaponDefs[item.weaponType]?.name || '武器';
-        icon.classList.add('weapon-icon');
-      } else if (item.type === 'ammo') {
-        icon.style.background = item.ammoType === 'pistol' ? '#FFEB3B' : '#00E5FF';
-        icon.title = item.ammoType === 'pistol' ? '手枪弹药' : '步枪弹药';
-        icon.classList.add('ammo-icon');
-      }
-
-      slot.appendChild(icon);
-
-      // 数量标签
+      slot.textContent = this._itemLabel(item);
       if (item.count > 1) {
-        const count = document.createElement('span');
-        count.className = 'inv-count';
-        count.textContent = item.count;
-        slot.appendChild(count);
+        const countEl = document.createElement('span');
+        countEl.className = 'inv-count';
+        countEl.textContent = item.count;
+        slot.appendChild(countEl);
       }
     }
 
-    // 点击选择/拖拽
-    slot.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      if (this.dragFrom === -1) {
-        // 开始拖拽
-        if (item) {
-          this.dragFrom = index;
-          slot.classList.add('dragging');
-        }
-      } else {
-        // 完成拖拽：交换
+    slot.addEventListener('click', () => {
+      if (this.dragFrom >= 0 && this.dragFrom !== index) {
         this.inventory.swapSlots(this.dragFrom, index);
         this.dragFrom = -1;
-        this.refresh();
+        this._buildUI();
+      } else {
+        this.dragFrom = index;
       }
-    });
-
-    slot.addEventListener('mouseenter', () => {
-      if (this.dragFrom !== -1 && this.dragFrom !== index) {
-        slot.classList.add('drag-target');
-      }
-    });
-
-    slot.addEventListener('mouseleave', () => {
-      slot.classList.remove('drag-target');
     });
 
     return slot;
   }
 
-  /** 打开背包 */
+  _itemLabel(item) {
+    if (item.type === 'block') return BlockNames[item.blockType] || '?';
+    if (item.type === 'weapon') return WeaponDefs[item.weaponType]?.name || '?';
+    if (item.type === 'ammo') {
+      const names = { pistol: '手枪弹', rifle: '步枪弹', shotgun: '霰弹' };
+      return names[item.ammoType] || '弹药';
+    }
+    return '?';
+  }
+
   open() {
     this.isOpen = true;
-    this.refresh();
+    this._buildUI();
     this.container.style.display = 'flex';
   }
 
-  /** 关闭背包 */
   close() {
     this.isOpen = false;
-    this.dragFrom = -1;
     this.container.style.display = 'none';
   }
-
-  /** 切换背包开关 */
-  toggle() {
-    if (this.isOpen) {
-      this.close();
-    } else {
-      this.open();
-    }
-  }
-
-  /** 刷新背包UI */
-  refresh() {
-    this._buildUI();
-  }
-}
-
-/** 方块CSS颜色 */
-function _getBlockCSSColor(blockType) {
-  const colors = {
-    [BlockType.GRASS]: '#4CAF50',
-    [BlockType.DIRT]: '#8B6914',
-    [BlockType.STONE]: '#808080',
-    [BlockType.SAND]: '#DBC67B',
-    [BlockType.WOOD]: '#6D4C41',
-    [BlockType.LEAVES]: '#2E7D32',
-    [BlockType.WATER]: '#2196F3',
-    [BlockType.COZE_CYAN]: '#00BCD4',
-  };
-  return colors[blockType] || '#888';
-}
-
-/** 武器CSS颜色 */
-function _getWeaponCSSColor(weaponType) {
-  const colors = {
-    [WeaponType.SWORD]: '#4FC3F7',
-    [WeaponType.AXE]: '#8D6E63',
-    [WeaponType.PISTOL]: '#FFEB3B',
-    [WeaponType.RIFLE]: '#00E5FF',
-  };
-  return colors[weaponType] || '#888';
-}
-
-/** 方块名称 */
-function _getBlockName(blockType) {
-  const names = {
-    [BlockType.GRASS]: '草地',
-    [BlockType.DIRT]: '泥土',
-    [BlockType.STONE]: '石头',
-    [BlockType.SAND]: '沙子',
-    [BlockType.WOOD]: '木头',
-    [BlockType.LEAVES]: '树叶',
-    [BlockType.WATER]: '水',
-    [BlockType.COZE_CYAN]: '青色',
-  };
-  return names[blockType] || '未知';
 }
