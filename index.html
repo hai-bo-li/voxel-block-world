@@ -8,7 +8,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>像素方块世界</title>
-  <link rel="stylesheet" href="/styles/main.css?v=15" />
+  <link rel="stylesheet" href="/styles/main.css?v=18" />
   <!-- 使用 importmap 引入 Three.js ES Module -->
   <script type="importmap">
   {
@@ -43,13 +43,15 @@
     <div class="controls-body">
       <div class="control-row"><span class="key">W A S D</span><span>移动</span></div>
       <div class="control-row"><span class="key">鼠标</span><span>视角旋转</span></div>
-      <div class="control-row"><span class="key">左键</span><span>攻击/放置方块</span></div>
-      <div class="control-row"><span class="key">右键</span><span>破坏方块</span></div>
+      <div class="control-row"><span class="key">左键</span><span>攻击/射击</span></div>
+      <div class="control-row"><span class="key">右键</span><span>瞄准/破坏方块</span></div>
       <div class="control-row"><span class="key">空格</span><span>跳跃</span></div>
-      <div class="control-row"><span class="key">1-9</span><span>快捷栏切换</span></div>
-      <div class="control-row"><span class="key">E</span><span>打开/关闭背包</span></div>
-      <div class="control-row"><span class="key">R</span><span>装填弹药</span></div>
-      <div class="control-row"><span class="key">滚轮</span><span>切换物品</span></div>
+      <div class="control-row"><span class="key">1-6 / 滚轮</span><span>切换武器</span></div>
+      <div class="control-row"><span class="key">Q</span><span>快速切换武器</span></div>
+      <div class="control-row"><span class="key">R</span><span>换弹</span></div>
+      <div class="control-row"><span class="key">E</span><span>背包</span></div>
+      <div class="control-row"><span class="key">Tab</span><span>设置</span></div>
+      <div class="control-row"><span class="key">= / -</span><span>调整FOV</span></div>
       <div class="control-row"><span class="key">ESC</span><span>暂停</span></div>
     </div>
   </div>
@@ -115,6 +117,57 @@
     </div>
   </div>
 
+  <!-- 受击红色叠加 -->
+  <div id="hitOverlay"></div>
+
+  <!-- 命中标记（准星处X） -->
+  <div id="hitMarker"></div>
+
+  <!-- 伤害方向指示 -->
+  <div id="damageDir">
+    <div class="dmg-arrow top"></div>
+    <div class="dmg-arrow bottom"></div>
+    <div class="dmg-arrow left"></div>
+    <div class="dmg-arrow right"></div>
+  </div>
+
+  <!-- 击杀提示 -->
+  <div id="killFeed"></div>
+
+  <!-- 波次信息 -->
+  <div id="waveInfo"></div>
+
+  <!-- 新手引导 -->
+  <div id="tutorialOverlay"></div>
+
+  <!-- 设置面板 -->
+  <div id="settingsPanel" style="display:none;">
+    <div id="settingsInner">
+      <div id="settingsTitle">设置</div>
+      <div class="setting-row">
+        <label>视野范围 (FOV)</label>
+        <input type="range" id="settingFOV" min="50" max="110" value="70" />
+        <span id="settingFOVVal">70</span>
+      </div>
+      <div class="setting-row">
+        <label>鼠标灵敏度</label>
+        <input type="range" id="settingSens" min="1" max="20" value="5" />
+        <span id="settingSensVal">5</span>
+      </div>
+      <div class="setting-row">
+        <label>镜头晃动</label>
+        <input type="range" id="settingBob" min="0" max="10" value="5" />
+        <span id="settingBobVal">5</span>
+      </div>
+      <div class="setting-row">
+        <label>移动平滑度</label>
+        <input type="range" id="settingSmooth" min="1" max="10" value="5" />
+        <span id="settingSmoothVal">5</span>
+      </div>
+      <div id="settingsClose">按 ESC 或 Tab 关闭</div>
+    </div>
+  </div>
+
   <!-- 全局错误捕获 -->
   <script>
     window.onerror = function(msg, url, line, col, err) {
@@ -135,6 +188,6 @@
   <!-- 错误显示区域 -->
   <div id="errorOverlay" style="position:fixed;top:0;left:0;right:0;background:red;color:white;padding:15px;font-size:16px;z-index:99999;display:none;font-family:monospace;white-space:pre-wrap;max-height:50vh;overflow:auto;"></div>
   <!-- 游戏主模块 -->
-  <script type="module" src="/js/game.js?v=15"></script>
+  <script type="module" src="/js/game.js?v=18"></script>
 </body>
 </html>

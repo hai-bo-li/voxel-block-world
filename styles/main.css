@@ -1102,3 +1102,341 @@ html, body {
     letter-spacing: 3px;
   }
 }
+
+/* ============================================
+   受击叠加、命中标记、伤害方向、击杀提示
+   ============================================ */
+
+/* 受击红色叠加 */
+#hitOverlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(255,0,0,0.5) 100%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+  z-index: 50;
+}
+
+/* 命中标记（准星处 X） */
+#hitMarker {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px; height: 20px;
+  pointer-events: none;
+  z-index: 55;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+#hitMarker.active {
+  opacity: 1;
+}
+#hitMarker::before, #hitMarker::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 14px; height: 2px;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(255,255,255,0.8);
+}
+#hitMarker::before { transform: translate(-50%, -50%) rotate(45deg); }
+#hitMarker::after { transform: translate(-50%, -50%) rotate(-45deg); }
+
+/* 伤害方向指示器 */
+#dmgIndicator {
+  position: fixed;
+  top: 50%; left: 50%;
+  width: 0; height: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+.dmg-arrow {
+  position: absolute;
+  width: 60px; height: 60px;
+  margin-left: -30px; margin-top: -30px;
+  animation: dmgArrowFade 0.8s ease-out forwards;
+}
+.dmg-arrow::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 20px solid rgba(255, 60, 60, 0.8);
+  filter: drop-shadow(0 0 4px rgba(255,0,0,0.6));
+}
+@keyframes dmgArrowFade {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.6); }
+}
+
+/* 击杀提示 */
+#killFeed {
+  position: fixed;
+  top: 80px; right: 20px;
+  z-index: 60;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kill-msg {
+  background: rgba(0,0,0,0.6);
+  border-left: 3px solid #f44;
+  padding: 6px 12px;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 14px;
+  animation: killSlideIn 0.3s ease-out;
+  white-space: nowrap;
+}
+.kill-msg.fade-out {
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+.kill-icon { color: #f44; margin-right: 4px; }
+.kill-name { color: #ff9; font-weight: bold; }
+@keyframes killSlideIn {
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* 波次信息 */
+#waveInfo {
+  position: fixed;
+  top: 20px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: none;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.wave-num {
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,200,0,0.5);
+  padding: 4px 16px;
+  border-radius: 3px;
+  color: #ffd700;
+  font-size: 16px;
+  font-weight: bold;
+  text-shadow: 0 0 6px rgba(255,200,0,0.4);
+}
+.wave-kills {
+  background: rgba(0,0,0,0.6);
+  padding: 4px 12px;
+  border-radius: 3px;
+  color: #ccc;
+  font-size: 13px;
+}
+
+/* 新手引导 */
+#tutorial {
+  position: fixed;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: none;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+.tutorial-text {
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(100,200,255,0.4);
+  padding: 10px 24px;
+  border-radius: 6px;
+  color: #8ef;
+  font-size: 16px;
+  letter-spacing: 1px;
+  animation: tutorialPulse 2s ease-in-out infinite;
+}
+@keyframes tutorialPulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(100,200,255,0.2); }
+  50% { box-shadow: 0 0 20px rgba(100,200,255,0.4); }
+}
+
+/* ============================================
+   设置面板
+   ============================================ */
+
+#settingsPanel {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#settingsInner {
+  background: #1a1a2e;
+  border: 2px solid #444;
+  border-radius: 8px;
+  padding: 30px 40px;
+  min-width: 320px;
+  max-width: 400px;
+  color: #ddd;
+}
+
+#settingsTitle {
+  text-align: center;
+  font-size: 22px;
+  color: #8ef;
+  margin-bottom: 20px;
+  letter-spacing: 2px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 10px;
+}
+
+.setting-row label {
+  font-size: 14px;
+  color: #aaa;
+  white-space: nowrap;
+  min-width: 100px;
+}
+
+.setting-row input[type="range"] {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #333;
+  border-radius: 3px;
+  outline: none;
+}
+
+.setting-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #8ef;
+  cursor: pointer;
+}
+
+.setting-row span {
+  font-size: 14px;
+  color: #8ef;
+  min-width: 24px;
+  text-align: right;
+}
+
+#settingsClose {
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  margin-top: 16px;
+}
+
+/* === 教程覆盖 === */
+#tutorialOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.4s;
+}
+
+.tutorial-card {
+  background: rgba(10,10,20,0.95);
+  border: 1px solid #4af;
+  border-radius: 12px;
+  padding: 32px 40px;
+  max-width: 480px;
+  text-align: center;
+  color: #fff;
+}
+
+.tutorial-card h2 {
+  font-size: 22px;
+  color: #4af;
+  margin-bottom: 18px;
+}
+
+.tutorial-card p {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #ccc;
+  margin-bottom: 10px;
+}
+
+.tutorial-card .key {
+  display: inline-block;
+  background: rgba(74,170,255,0.15);
+  border: 1px solid #4af;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  color: #4af;
+  margin: 0 2px;
+}
+
+.tutorial-start-btn {
+  margin-top: 20px;
+  padding: 10px 32px;
+  background: #4af;
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.tutorial-start-btn:hover {
+  background: #6cf;
+}
+
+/* === 受击方向指示 === */
+#damageDir {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.dmg-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 16px solid rgba(255,50,50,0.7);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.dmg-arrow.active {
+  opacity: 1;
+}
+
+.dmg-arrow.top { top: 0; left: 50%; transform: translateX(-50%); }
+.dmg-arrow.bottom { bottom: 0; left: 50%; transform: translateX(-50%) rotate(180deg); }
+.dmg-arrow.left { left: 0; top: 50%; transform: translateY(-50%) rotate(-90deg); }
+.dmg-arrow.right { right: 0; top: 50%; transform: translateY(-50%) rotate(90deg); }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

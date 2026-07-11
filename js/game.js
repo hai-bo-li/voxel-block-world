@@ -8,12 +8,12 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=15';
-import { AnimalManager } from './animals.js?v=15';
+} from './voxel.js?v=18';
+import { AnimalManager } from './animals.js?v=18';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=15';
+} from './weapons.js?v=18';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -30,6 +30,12 @@ class Player {
     // 视角旋转
     this.pitch = 0;
     this.yaw = 0;
+    this._smoothYaw = 0;
+    this._smoothPitch = 0;
+    this.sensitivity = 0.0015;     // 降低默认灵敏度（原0.002）
+    this.mouseSmoothing = 0.15;    // 鼠标平滑系数（0=无平滑, 1=强平滑）
+    this.cameraBobEnabled = true;  // 镜头晃动开关
+    this._bobTimer = 0;
 
     // 物理参数
     this.gravity = -25;
@@ -46,6 +52,8 @@ class Player {
     this.keys = {};
     this.mouseDX = 0;
     this.mouseDY = 0;
+    this._rawDX = 0;
+    this._rawDY = 0;
 
     // 交互参数
     this.reachDistance = 7;
@@ -75,6 +83,7 @@ class Player {
     this.hp = Math.max(0, this.hp - amount);
     this.invincibleTimer = 0.3; // 0.3秒无敌
     this.hitFlashTimer = 0.2;
+    this._lastDmgFrom = fromPosition ? fromPosition.clone() : null;
 
     // 击退
     if (fromPosition) {
@@ -107,12 +116,10 @@ class Player {
     this.onHPChanged?.(this.hp, this.maxHP);
   }
 
-  /** 处理鼠标移动 */
+  /** 处理鼠标移动 - 带平滑 */
   onMouseMove(dx, dy) {
-    const sensitivity = 0.002;
-    this.yaw -= dx * sensitivity;
-    this.pitch -= dy * sensitivity;
-    this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
+    this._rawDX += dx;
+    this._rawDY += dy;
   }
 
   /** 每帧更新 */
@@ -124,6 +131,23 @@ class Player {
     // 无敌时间递减
     this.invincibleTimer = Math.max(0, this.invincibleTimer - dt);
     this.hitFlashTimer = Math.max(0, this.hitFlashTimer - dt);
+
+    // === 鼠标平滑处理 ===
+    const smoothFactor = 1 - this.mouseSmoothing;
+    this.mouseDX = this._rawDX * smoothFactor;
+    this.mouseDY = this._rawDY * smoothFactor;
+    this._rawDX *= this.mouseSmoothing;
+    this._rawDY *= this.mouseSmoothing;
+    if (Math.abs(this._rawDX) < 0.01) this._rawDX = 0;
+    if (Math.abs(this._rawDY) < 0.01) this._rawDY = 0;
+
+    this.yaw -= this.mouseDX * this.sensitivity;
+    this.pitch -= this.mouseDY * this.sensitivity;
+    this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
+
+    // === 视角平滑插值 ===
+    this._smoothYaw += (this.yaw - this._smoothYaw) * Math.min(1, dt * 20);
+    this._smoothPitch += (this.pitch - this._smoothPitch) * Math.min(1, dt * 20);
 
     // 击退物理
     if (this.knockbackVel.lengthSq() > 0.01) {
@@ -204,17 +228,27 @@ class Player {
       this.velocity.y = 0;
     }
 
-    // 更新相机
+    // 更新相机 - 带镜头晃动
+    const isMovingNow = this.keys['KeyW'] || this.keys['KeyA'] || this.keys['KeyS'] || this.keys['KeyD'];
+    if (this.cameraBobEnabled && isMovingNow && this.onGround) {
+      this._bobTimer += dt * 9;
+    } else {
+      this._bobTimer += dt * 1.5;
+    }
+    const bobAmount = (isMovingNow && this.onGround) ? 1 : 0;
+    const bobY = Math.sin(this._bobTimer) * 0.04 * bobAmount;
+    const bobX = Math.cos(this._bobTimer * 0.5) * 0.02 * bobAmount;
+
     this.camera.position.set(
-      this.position.x,
-      this.position.y + this.eyeHeight,
+      this.position.x + bobX,
+      this.position.y + this.eyeHeight + bobY,
       this.position.z
     );
 
     const lookDir = new THREE.Vector3(
-      -Math.sin(this.yaw) * Math.cos(this.pitch),
-      Math.sin(this.pitch),
-      -Math.cos(this.yaw) * Math.cos(this.pitch)
+      -Math.sin(this._smoothYaw) * Math.cos(this._smoothPitch),
+      Math.sin(this._smoothPitch),
+      -Math.cos(this._smoothYaw) * Math.cos(this._smoothPitch)
     );
     this.camera.lookAt(
       this.camera.position.x + lookDir.x,
@@ -658,6 +692,28 @@ class Game {
     this.isAiming = false;
     this.baseFOV = 75;
 
+    // Q键快速切换
+    this._lastWeaponSlot = -1;
+
+    // 命中标记
+    this._hitMarkerTimer = 0;
+
+    // 设置参数（灵敏度、晃动、平滑度）
+    this.mouseSensitivity = 0.002;
+    this.bobIntensity = 1.0;
+    this.moveSmoothing = 0.85;
+
+    // 波次系统
+    this.waveNumber = 0;
+    this.waveEnemiesAlive = 0;
+    this.waveKills = 0;
+    this.totalKills = 0;
+
+    // 新手引导
+    this.tutorialOverlayStep = 0;
+    this.tutorialOverlayTimer = 0;
+    this.tutorialOverlayShown = false;
+
     this.ui = {
       crosshair: document.getElementById('crosshair'),
       hotbar: document.getElementById('hotbar'),
@@ -705,6 +761,7 @@ class Game {
       }
 
       this._initEvents();
+      this._initSettingsSliders();
     } catch(e) {
       console.error('[Game] 初始化失败:', e.message, e.stack);
       alert('游戏初始化失败: ' + e.message);
@@ -822,7 +879,7 @@ class Game {
     this.fovMin = 15;
     this.fovMax = 130;
     this.camera = new THREE.PerspectiveCamera(
-      this.baseFOV, window.innerWidth / window.innerHeight, 0.1, 1000
+      this.fov, window.innerWidth / window.innerHeight, 0.1, 1000
     );
     this.scene.add(this.camera);
 
@@ -857,6 +914,18 @@ class Game {
     };
     this.weaponManager.onAmmoChanged = () => {
       this._updateAmmoHUD();
+    };
+
+    // 命中/击杀回调
+    this.weaponManager.onEnemyHit = (animal) => {
+      this._showHitMarker();
+    };
+    this.weaponManager.onEnemyKill = (animal) => {
+      const name = animal.robotType === 'heavy' ? '重型机器人' : '侦察机器人';
+      this._showKillFeed(name);
+      this.waveKills++;
+      this.totalKills++;
+      this._updateWaveInfo();
     };
   }
 
@@ -951,6 +1020,47 @@ class Game {
     }
 
     this._updateHealthBar(this.player.hp, this.player.maxHP);
+
+    // === 命中标记 ===
+    const hitMarker = document.getElementById('hitMarker');
+    if (!hitMarker) {
+      const hm = document.createElement('div');
+      hm.id = 'hitMarker';
+      hm.innerHTML = '<span></span><span></span><span></span><span></span>';
+      document.body.appendChild(hm);
+    }
+
+    // === 伤害方向指示 ===
+    const damageDir = document.getElementById('damageDir');
+    if (!damageDir) {
+      const di = document.createElement('div');
+      di.id = 'damageDir';
+      document.body.appendChild(di);
+    }
+
+    // === 击杀提示 ===
+    const killFeed = document.getElementById('killFeed');
+    if (!killFeed) {
+      const kf = document.createElement('div');
+      kf.id = 'killFeed';
+      document.body.appendChild(kf);
+    }
+
+    // === 波次信息 ===
+    const waveInfo = document.getElementById('waveInfo');
+    if (!waveInfo) {
+      const wi = document.createElement('div');
+      wi.id = 'waveInfo';
+      document.body.appendChild(wi);
+    }
+
+    // === 新手引导 ===
+    const tutorialOverlay = document.getElementById('tutorialOverlay');
+    if (!tutorialOverlay) {
+      const t = document.createElement('div');
+      t.id = 'tutorialOverlay';
+      document.body.appendChild(t);
+    }
   }
 
   /** 更新血条 */
@@ -1019,13 +1129,128 @@ class Game {
     `;
   }
 
-  /** 受击红色叠加 */
-  _showHitOverlay() {
+  /** 受击红色叠加 - 带方向指示 */
+  _showHitOverlay(fromPosition) {
     if (!this._hitOverlayEl) return;
     this._hitOverlayEl.style.opacity = '0.4';
     setTimeout(() => {
       this._hitOverlayEl.style.opacity = '0';
     }, 200);
+
+    // 伤害方向指示
+    if (fromPosition) {
+      this._showDmgIndicator(fromPosition);
+    }
+  }
+
+  /** 显示伤害方向指示 */
+  _showDmgIndicator(fromPos) {
+    const di = document.getElementById('damageDir');
+    if (!di) return;
+
+    // 计算伤害来源方向相对于玩家视角的角度
+    const dx = fromPos.x - this.player.position.x;
+    const dz = fromPos.z - this.player.position.z;
+    const angle = Math.atan2(dx, -dz) - this.player.yaw;
+
+    // 创建方向箭头
+    const arrow = document.createElement('div');
+    arrow.className = 'dmg-arrow';
+    arrow.style.transform = `rotate(${angle}rad)`;
+
+    di.appendChild(arrow);
+    setTimeout(() => {
+      if (arrow.parentNode) arrow.parentNode.removeChild(arrow);
+    }, 800);
+  }
+
+  /** 显示命中标记 */
+  _showHitMarker() {
+    const hm = document.getElementById('hitMarker');
+    if (!hm) return;
+    hm.classList.add('active');
+    this._hitMarkerTimer = 0.15;
+  }
+
+  /** 显示击杀提示 */
+  _showKillFeed(enemyName) {
+    const kf = document.getElementById('killFeed');
+    if (!kf) return;
+
+    const msg = document.createElement('div');
+    msg.className = 'kill-msg';
+    msg.innerHTML = `<span class="kill-icon">☠</span> 击杀 <span class="kill-name">${enemyName}</span>`;
+    kf.appendChild(msg);
+
+    setTimeout(() => {
+      msg.classList.add('fade-out');
+      setTimeout(() => {
+        if (msg.parentNode) msg.parentNode.removeChild(msg);
+      }, 500);
+    }, 2000);
+  }
+
+  /** 更新波次信息 */
+  _updateWaveInfo() {
+    const wi = document.getElementById('waveInfo');
+    if (!wi) return;
+    wi.innerHTML = `<span class="wave-num">第 ${this.waveNumber} 波</span>` +
+      `<span class="wave-kills">击杀: ${this.waveKills}</span>`;
+  }
+
+  /** 开始新一波 */
+  _startWave() {
+    this.waveNumber++;
+    this.waveKills = 0;
+
+    // 根据波次增加敌人数量
+    const baseScout = this.isMobile ? 2 : 5;
+    const baseHeavy = this.isMobile ? 1 : 3;
+    const extraScouts = Math.min(this.waveNumber - 1, 4);
+    const extraHeavies = Math.min(Math.floor((this.waveNumber - 1) / 2), 3);
+
+    this._showHint(`第 ${this.waveNumber} 波来袭！`);
+
+    this.waveEnemiesAlive = baseScout + extraScouts + baseHeavy + extraHeavies;
+    this._updateWaveInfo();
+  }
+
+  /** 新手引导 */
+  _updateTutorial(dt) {
+    if (this.tutorialOverlayShown) return;
+
+    const tutorialOverlay = document.getElementById('tutorialOverlay');
+    if (!tutorialOverlay) return;
+
+    this.tutorialOverlayTimer += dt;
+
+    const steps = [
+      { time: 2, text: 'WASD 移动 | 鼠标控制视角' },
+      { time: 5, text: '左键攻击 | 右键瞄准/破坏方块' },
+      { time: 9, text: '滚轮/数字键 切换武器 | Q 快速切换' },
+      { time: 13, text: 'R 换弹 | E 打开背包' },
+      { time: 17, text: '消灭机器人，生存下去！' },
+    ];
+
+    const currentStep = steps.findIndex((s, i) => {
+      const next = steps[i + 1];
+      return this.tutorialOverlayTimer >= s.time && (!next || this.tutorialOverlayTimer < next.time);
+    });
+
+    if (currentStep >= 0 && currentStep !== this.tutorialOverlayStep) {
+      this.tutorialOverlayStep = currentStep;
+      tutorialOverlay.innerHTML = `<div class="tutorial-text">${steps[currentStep].text}</div>`;
+      tutorialOverlay.style.opacity = '1';
+      tutorialOverlay.style.display = 'block';
+    }
+
+    if (this.tutorialOverlayTimer > 22) {
+      tutorialOverlay.style.opacity = '0';
+      this.tutorialOverlayShown = true;
+      setTimeout(() => {
+        tutorialOverlay.style.display = 'none';
+      }, 500);
+    }
   }
 
   /** 显示死亡界面 */
@@ -1212,6 +1437,9 @@ class Game {
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
         const idx = parseInt(e.code.charAt(5)) - 1;
         if (idx < this.inventory.cols) {
+          if (this.inventory.selectedSlot !== idx) {
+            this._lastWeaponSlot = this.inventory.selectedSlot;
+          }
           this.inventory.selectedSlot = idx;
           this._updateHotbar();
         }
@@ -1245,6 +1473,17 @@ class Game {
       if (e.code === 'KeyR' && this.isRunning) {
         this._reloadWeapon();
       }
+
+      // Q键快速切换武器
+      if (e.code === 'KeyQ' && this.isRunning) {
+        this._quickSwapWeapon();
+      }
+
+      // Tab键打开设置
+      if (e.code === 'Tab' && this.isRunning) {
+        e.preventDefault();
+        this._toggleSettings();
+      }
     });
 
     document.addEventListener('keyup', (e) => {
@@ -1253,7 +1492,7 @@ class Game {
 
     document.addEventListener('mousemove', (e) => {
       if (!this.isPointerLocked) return;
-      this.player.onMouseMove(e.movementX, e.movementY);
+      this.player.onMouseMove(e.movementX * this.mouseSensitivity / 0.0015, e.movementY * this.mouseSensitivity / 0.0015);
     });
 
     document.addEventListener('mousedown', (e) => {
@@ -1301,8 +1540,10 @@ class Game {
       }
 
       if (e.deltaY > 0) {
+        this._lastWeaponSlot = this.inventory.selectedSlot;
         this.inventory.selectedSlot = (this.inventory.selectedSlot + 1) % this.inventory.cols;
       } else {
+        this._lastWeaponSlot = this.inventory.selectedSlot;
         this.inventory.selectedSlot = (this.inventory.selectedSlot - 1 + this.inventory.cols) % this.inventory.cols;
       }
       this._updateHotbar();
@@ -1379,7 +1620,7 @@ class Game {
     const origOnHPChanged = this.player.onHPChanged;
     this.player.onHPChanged = (hp, maxHP) => {
       this._updateHealthBar(hp, maxHP);
-      this._showHitOverlay();
+      this._showHitOverlay(this.player._lastDmgFrom);
     };
   }
 
@@ -1459,6 +1700,97 @@ class Game {
     }
 
     this.weaponManager.startReload(currentItem.weaponType);
+  }
+
+  /** Q键快速切换武器 */
+  _quickSwapWeapon() {
+    if (this._lastWeaponSlot !== undefined && this._lastWeaponSlot !== this.inventory.selectedSlot) {
+      const prevSlot = this.inventory.selectedSlot;
+      this.inventory.selectedSlot = this._lastWeaponSlot;
+      this._lastWeaponSlot = prevSlot;
+    } else {
+      // 切换到下一个有武器的槽位
+      const start = this.inventory.selectedSlot;
+      for (let i = 1; i <= this.inventory.cols; i++) {
+        const idx = (start + i) % this.inventory.cols;
+        const item = this.inventory.hotbar[idx];
+        if (item && item.type === 'weapon') {
+          this._lastWeaponSlot = this.inventory.selectedSlot;
+          this.inventory.selectedSlot = idx;
+          break;
+        }
+      }
+    }
+    this._updateHotbar();
+  }
+
+  /** Tab键切换设置面板 */
+  _toggleSettings() {
+    const panel = document.getElementById('settingsPanel');
+    if (!panel) return;
+
+    if (panel.style.display === 'none') {
+      panel.style.display = 'flex';
+      document.exitPointerLock();
+    } else {
+      panel.style.display = 'none';
+      if (!this.isMobile) this.canvas.requestPointerLock();
+    }
+  }
+
+  /** 初始化设置滑块 */
+  _initSettingsSliders() {
+    const fovSlider = document.getElementById('settingFOV');
+    const fovVal = document.getElementById('settingFOVVal');
+    const sensSlider = document.getElementById('settingSens');
+    const sensVal = document.getElementById('settingSensVal');
+    const bobSlider = document.getElementById('settingBob');
+    const bobVal = document.getElementById('settingBobVal');
+    const smoothSlider = document.getElementById('settingSmooth');
+    const smoothVal = document.getElementById('settingSmoothVal');
+
+    if (fovSlider) {
+      fovSlider.value = this.fov;
+      if (fovVal) fovVal.textContent = this.fov;
+      fovSlider.addEventListener('input', () => {
+        const v = parseInt(fovSlider.value);
+        this.fov = v;
+        this.defaultFov = v;
+        this.camera.fov = v;
+        this.camera.updateProjectionMatrix();
+        if (fovVal) fovVal.textContent = v;
+      });
+    }
+
+    if (sensSlider) {
+      sensSlider.value = Math.round(this.mouseSensitivity * 2500);
+      if (sensVal) sensVal.textContent = sensSlider.value;
+      sensSlider.addEventListener('input', () => {
+        const v = parseInt(sensSlider.value);
+        this.mouseSensitivity = v / 2500;
+        if (sensVal) sensVal.textContent = v;
+      });
+    }
+
+    if (bobSlider) {
+      bobSlider.value = Math.round(this.bobIntensity * 10);
+      if (bobVal) bobVal.textContent = bobSlider.value;
+      bobSlider.addEventListener('input', () => {
+        const v = parseInt(bobSlider.value);
+        this.bobIntensity = v / 10;
+        if (bobVal) bobVal.textContent = v;
+      });
+    }
+
+    if (smoothSlider) {
+      smoothSlider.value = Math.round(this.moveSmoothing * 10);
+      if (smoothVal) smoothVal.textContent = smoothSlider.value;
+      smoothSlider.addEventListener('input', () => {
+        const v = parseInt(smoothSlider.value);
+        this.moveSmoothing = v / 10;
+        if (smoothVal) smoothVal.textContent = v;
+      });
+    }
   }
 
   _showHint(text) {
@@ -1566,7 +1898,7 @@ class Game {
 
       if (this.weaponManager) {
         const isMoving = this.player.keys['KeyW'] || this.player.keys['KeyA'] || this.player.keys['KeyS'] || this.player.keys['KeyD'];
-        this.weaponManager.update(dt, isMoving);
+        this.weaponManager.update(dt, isMoving, this.bobIntensity);
       }
     }
 
@@ -1586,6 +1918,18 @@ class Game {
     if (this.frameCount % 10 === 0) {
       this._updateDebugInfo();
     }
+
+    // 命中标记计时
+    if (this._hitMarkerTimer > 0) {
+      this._hitMarkerTimer -= dt;
+      if (this._hitMarkerTimer <= 0) {
+        const hm = document.getElementById('hitMarker');
+        if (hm) hm.classList.remove('active');
+      }
+    }
+
+    // 新手引导
+    this._updateTutorial(dt);
   }
 }
 

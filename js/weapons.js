@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=15';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=18';
 
 /* ============================================
    武器类型定义
@@ -133,10 +133,11 @@ export function getBlockMaxHP(blockType) {
    子弹类
    ============================================ */
 class Bullet {
-  constructor(scene, origin, direction, weaponDef, owner) {
+  constructor(scene, origin, direction, weaponDef, owner, weaponManager) {
     this.scene = scene;
     this.weaponDef = weaponDef;
     this.owner = owner;
+    this._weaponManager = weaponManager || null;
     this.alive = true;
     this.age = 0;
     this.maxAge = weaponDef.range / weaponDef.bulletSpeed + 0.5;
@@ -199,6 +200,10 @@ class Bullet {
         const dist = this.mesh.position.distanceTo(animal.position);
         if (dist < 1.2) {
           animal.takeDamage(this.weaponDef.damage, { position: this.mesh.position.clone() });
+          // 通知武器管理器
+          if (this._weaponManager) {
+            this._weaponManager._onAnimalHit(animal);
+          }
           this.destroy();
           return;
         }
@@ -339,12 +344,13 @@ export class WeaponRenderer {
   constructor(camera, scene) {
     this.camera = camera;
     this.scene = scene;
-    this.currentWeapon = null;
+    this.currentWeapon = WeaponType.FIST;
     this.weaponGroup = new THREE.Group();
     this.weaponGroup.renderOrder = 999;
     this.swingPhase = 0;
     this.recoilPhase = 0;
     this.bobPhase = 0;
+    this.swingStartTime = 0;
   }
 
   /** 切换武器 */
@@ -476,9 +482,10 @@ export class WeaponRenderer {
     }
   }
 
-  /** 触发挥动动画 */
+  /** 触发挥砍动画 */
   triggerSwing() {
     this.swingPhase = 1.0;
+    this.swingStartTime = performance.now();
   }
 
   /** 触发后坐力动画 */
@@ -487,28 +494,45 @@ export class WeaponRenderer {
   }
 
   /** 每帧更新武器动画 */
-  update(dt, isMoving) {
+  update(dt, isMoving, bobIntensity) {
     if (isMoving) {
       this.bobPhase += dt * 8;
     } else {
       this.bobPhase += dt * 1.5;
     }
-    const bobX = Math.sin(this.bobPhase) * (isMoving ? 0.015 : 0.003);
-    const bobY = Math.abs(Math.cos(this.bobPhase)) * (isMoving ? 0.012 : 0.002);
+    const bobX = Math.sin(this.bobPhase) * (isMoving ? 0.015 : 0.003) * bobIntensity;
+    const bobY = Math.abs(Math.cos(this.bobPhase)) * (isMoving ? 0.012 : 0.002) * bobIntensity;
 
     if (this.swingPhase > 0) {
-      this.swingPhase = Math.max(0, this.swingPhase - dt * 6);
+      this.swingPhase = Math.max(0, this.swingPhase - dt * 5);
     }
 
     if (this.recoilPhase > 0) {
       this.recoilPhase = Math.max(0, this.recoilPhase - dt * 8);
     }
 
-    const swingAngle = this.swingPhase * Math.PI * 0.6;
+    // 增强的挥砍动画 - 剑类武器大幅度横劈
+    const isSword = this.currentWeapon === WeaponType.SWORD;
+    const isMelee = [WeaponType.FIST, WeaponType.SWORD, WeaponType.AXE, WeaponType.PICKAXE].includes(this.currentWeapon);
+
+    let swingAngle, swingRotZ;
+    if (isSword && this.swingPhase > 0) {
+      // 光剑：大幅度横劈 + 旋转
+      const t = 1 - this.swingPhase;
+      swingAngle = Math.sin(t * Math.PI) * Math.PI * 0.9;
+      swingRotZ = Math.sin(t * Math.PI) * 0.5;
+    } else if (isMelee && this.swingPhase > 0) {
+      swingAngle = this.swingPhase * Math.PI * 0.6;
+      swingRotZ = -this.swingPhase * 0.3;
+    } else {
+      swingAngle = 0;
+      swingRotZ = 0;
+    }
+
     const recoilZ = this.recoilPhase * 0.08;
 
     this.weaponGroup.position.set(bobX, bobY - recoilZ * 0.3, -recoilZ);
-    this.weaponGroup.rotation.set(-swingAngle * 0.5, 0, -swingAngle * 0.3);
+    this.weaponGroup.rotation.set(-swingAngle * 0.5, 0, swingRotZ || -swingAngle * 0.3);
 
     if (!this.weaponGroup.parent) {
       this.camera.add(this.weaponGroup);
@@ -529,6 +553,10 @@ export class WeaponManager {
     this.renderer = new WeaponRenderer(camera, scene);
     this.currentWeapon = WeaponType.FIST;
     this.cooldownTimer = 0;
+
+    // 命中回调（由Game设置）
+    this.onEnemyHit = null;   // (animal) => void
+    this.onEnemyKill = null;  // (animal) => void
 
     // 弹药系统
     this.currentAmmo = {};   // 武器类型 -> 当前弹匣剩余
@@ -557,6 +585,12 @@ export class WeaponManager {
     this.onReloadProgress = null;
     this.onReloadComplete = null;
     this.onAmmoChanged = null;
+  }
+
+  /** 子弹命中生物时调用 */
+  _onAnimalHit(animal) {
+    if (this.onEnemyHit) this.onEnemyHit(animal);
+    if (!animal.alive && this.onEnemyKill) this.onEnemyKill(animal);
   }
 
   /** 切换当前武器 */
@@ -689,6 +723,8 @@ export class WeaponManager {
           const dist = hitPos.distanceTo(animal.position);
           if (dist < 1.2) {
             animal.takeDamage(def.damage, { position: this.camera.position.clone() });
+            this.onEnemyHit?.(animal);
+            if (!animal.alive) this.onEnemyKill?.(animal);
             return true;
           }
         }
@@ -722,7 +758,7 @@ export class WeaponManager {
 
     const origin = this.camera.position.clone().add(dir.clone().multiplyScalar(0.5));
 
-    const bullet = new Bullet(this.scene, origin, dir, def, 'player');
+    const bullet = new Bullet(this.scene, origin, dir, def, 'player', this);
     this.bullets.push(bullet);
 
     return true;
@@ -810,7 +846,7 @@ export class WeaponManager {
   }
 
   /** 每帧更新 */
-  update(dt, isMoving) {
+  update(dt, isMoving, bobIntensity) {
     // 冷却计时
     if (this.cooldownTimer > 0) {
       this.cooldownTimer = Math.max(0, this.cooldownTimer - dt);
@@ -862,7 +898,7 @@ export class WeaponManager {
     }
 
     // 更新武器渲染
-    this.renderer.update(dt, isMoving);
+    this.renderer.update(dt, isMoving, bobIntensity || 1.0);
   }
 }
 
