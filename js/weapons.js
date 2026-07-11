@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=18';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=19';
 
 /* ============================================
    武器类型定义
@@ -1037,6 +1037,37 @@ export class Inventory {
       }
     }
     return false;
+  }
+
+  /** 添加弹药 */
+  addAmmo(pistolAmmo, rifleAmmo, shotgunAmmo) {
+    const ammoTypes = [
+      { type: 'pistol', count: pistolAmmo },
+      { type: 'rifle', count: rifleAmmo },
+      { type: 'shotgun', count: shotgunAmmo },
+    ];
+    for (const a of ammoTypes) {
+      if (a.count <= 0) continue;
+      // 找已有的弹药槽
+      let found = false;
+      for (let i = 0; i < this.slots.length; i++) {
+        const slot = this.slots[i];
+        if (slot && slot.type === 'ammo' && slot.ammoType === a.type) {
+          slot.count += a.count;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        // 找空槽
+        for (let i = 0; i < this.slots.length; i++) {
+          if (!this.slots[i]) {
+            this.slots[i] = { type: 'ammo', ammoType: a.type, count: a.count };
+            break;
+          }
+        }
+      }
+    }
   }
 
   /** 获取弹药类型的总数量 */

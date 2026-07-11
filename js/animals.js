@@ -4,8 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=18';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=18';
+import { BlockType, isSolid } from './voxel.js?v=19';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=19';
+import { audio } from './audio.js?v=19';
 
 /* ============================================
    常量配置
@@ -66,6 +67,8 @@ class Robot {
     // 受击效果
     this.hitFlashTimer = 0;
     this.knockbackVel = new THREE.Vector3(0, 0, 0);
+    this.verticalVel = 0;           // 垂直速度（重力用）
+    this.gravity = -25;             // 重力加速度
 
     // AI 状态
     this.state = 'idle';       // idle, wander, chase, attack
@@ -161,10 +164,11 @@ class Robot {
     // 受击闪烁效果
     this.hitFlashTimer = 0.15;
 
-    // 击退
+    // 击退（包含向上的分量）
     if (source && source.position) {
       const kb = computeKnockback(this.position, source.position, KNOCKBACK_STRENGTH);
       this.knockbackVel.copy(kb);
+      this.verticalVel = 5; // 击退时给一个向上的初速
     }
 
     // 受击粒子
@@ -189,6 +193,9 @@ class Robot {
   die() {
     this.alive = false;
     this.hp = 0;
+
+    // 击杀音效
+    audio.kill();
 
     // 死亡粒子爆炸
     const colors = [0xB0B8C0, 0xFF4444, 0x4A90D9, 0x3A3E44];
@@ -314,16 +321,34 @@ class Robot {
       });
     }
 
-    // 击退物理
-    if (this.knockbackVel.lengthSq() > 0.01) {
-      this.position.add(this.knockbackVel.clone().multiplyScalar(dt));
-      this.knockbackVel.multiplyScalar(0.85); // 摩擦力衰减
-      if (this.knockbackVel.lengthSq() < 0.01) {
-        this.knockbackVel.set(0, 0, 0);
+    // 击退物理 + 重力
+    const groundY = this._getGroundY(this.position.x, this.position.z);
+    const isOnGround = this.position.y <= groundY + 0.1;
+
+    if (this.knockbackVel.lengthSq() > 0.01 || !isOnGround) {
+      // 水平击退
+      this.position.x += this.knockbackVel.x * dt;
+      this.position.z += this.knockbackVel.z * dt;
+      this.knockbackVel.x *= 0.9;
+      this.knockbackVel.z *= 0.9;
+
+      // 垂直运动（重力）
+      this.verticalVel += this.gravity * dt;
+      this.position.y += this.verticalVel * dt;
+
+      // 落地检测
+      if (this.position.y <= groundY) {
+        this.position.y = groundY;
+        this.verticalVel = 0;
+        if (this.knockbackVel.lengthSq() < 0.05) {
+          this.knockbackVel.set(0, 0, 0);
+        }
       }
-      // 贴地
-      const gy = this._getGroundY(this.position.x, this.position.z);
-      if (this.position.y < gy) this.position.y = gy;
+    } else {
+      // 确保贴地
+      this.position.y = groundY;
+      this.verticalVel = 0;
+      this.knockbackVel.set(0, 0, 0);
     }
 
     // AI 状态机
@@ -852,6 +877,9 @@ export class AnimalManager {
     this.robots = [];
     this.spawnCenter = new THREE.Vector3(0, 0, 0);
     this._spawned = false;
+    this._respawnQueue = [];        // 等待重生的敌人
+    this.respawnDelay = 10;         // 死亡后10秒重生
+    this.totalKills = 0;            // 总击杀数
   }
 
   get animals() {
@@ -932,8 +960,25 @@ export class AnimalManager {
       }
     }
 
-    // 清理死亡机器人
+    // 将死亡机器人加入重生队列
+    const deadRobots = this.robots.filter(r => !r.alive);
+    for (const dead of deadRobots) {
+      this.totalKills++;
+      this._respawnQueue.push({
+        timer: this.respawnDelay,
+        type: dead instanceof HeavyBot ? 'heavy' : 'scout',
+      });
+    }
     this.robots = this.robots.filter(r => r.alive);
+
+    // 处理重生队列
+    for (let i = this._respawnQueue.length - 1; i >= 0; i--) {
+      this._respawnQueue[i].timer -= dt;
+      if (this._respawnQueue[i].timer <= 0) {
+        this._spawnSingle(this._respawnQueue[i].type);
+        this._respawnQueue.splice(i, 1);
+      }
+    }
 
     // 更新敌人子弹
     if (this.scene._enemyBullets) {
@@ -944,6 +989,29 @@ export class AnimalManager {
           this.scene._enemyBullets.splice(i, 1);
         }
       }
+    }
+  }
+
+  /** 生成单个敌人 */
+  _spawnSingle(type) {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = randRange(8, SPAWN_RADIUS);
+      const sx = this.spawnCenter.x + Math.cos(angle) * dist;
+      const sz = this.spawnCenter.z + Math.sin(angle) * dist;
+
+      const gy = this._getGroundY(sx, sz);
+      if (gy < 1 || gy > 40) continue;
+
+      let robot;
+      if (type === 'heavy') {
+        robot = new HeavyBot(this.scene, this.world, sx, gy, sz);
+      } else {
+        robot = new ScoutBot(this.scene, this.world, sx, gy, sz);
+      }
+      robot.targetPlayer = this._player || null;
+      this.robots.push(robot);
+      return;
     }
   }
 

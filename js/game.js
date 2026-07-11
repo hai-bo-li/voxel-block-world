@@ -8,12 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=18';
-import { AnimalManager } from './animals.js?v=18';
+} from './voxel.js?v=19';
+import { AnimalManager } from './animals.js?v=19';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=18';
+} from './weapons.js?v=19';
+import { audio } from './audio.js?v=19';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -709,6 +710,11 @@ class Game {
     this.waveKills = 0;
     this.totalKills = 0;
 
+    // 任务系统
+    this.quests = [];
+    this._initQuests();
+    this._footstepTimer = 0;
+
     // 新手引导
     this.tutorialOverlayStep = 0;
     this.tutorialOverlayTimer = 0;
@@ -926,6 +932,14 @@ class Game {
       this.waveKills++;
       this.totalKills++;
       this._updateWaveInfo();
+
+      // 更新任务进度
+      for (const q of this.quests) {
+        if (q.done) continue;
+        if (q.type === 'kill_total') { q.progress++; if (q.progress >= q.target) { q.done = true; this._onQuestComplete(q); } }
+        if (q.type === 'kill_scout' && animal.robotType === 'scout') { q.progress++; if (q.progress >= q.target) { q.done = true; this._onQuestComplete(q); } }
+        if (q.type === 'kill_heavy' && animal.robotType === 'heavy') { q.progress++; if (q.progress >= q.target) { q.done = true; this._onQuestComplete(q); } }
+      }
     };
   }
 
@@ -1137,6 +1151,9 @@ class Game {
       this._hitOverlayEl.style.opacity = '0';
     }, 200);
 
+    // 受击音效
+    audio.hurt();
+
     // 伤害方向指示
     if (fromPosition) {
       this._showDmgIndicator(fromPosition);
@@ -1164,12 +1181,20 @@ class Game {
     }, 800);
   }
 
-  /** 显示命中标记 */
+  /** 显示命中标记 - 准心变红 */
   _showHitMarker() {
-    const hm = document.getElementById('hitMarker');
-    if (!hm) return;
-    hm.classList.add('active');
-    this._hitMarkerTimer = 0.15;
+    const crosshair = document.getElementById('crosshair');
+    if (crosshair) {
+      crosshair.classList.add('hit');
+      this._hitMarkerTimer = 0.2;
+    }
+    // 音效
+    audio.hit();
+    // 更新命中任务
+    for (const q of this.quests) {
+      if (q.done) continue;
+      if (q.type === 'hit_enemy') { q.progress++; if (q.progress >= q.target) { q.done = true; this._onQuestComplete(q); } }
+    }
   }
 
   /** 显示击杀提示 */
@@ -1251,6 +1276,120 @@ class Game {
         tutorialOverlay.style.display = 'none';
       }, 500);
     }
+  }
+
+  /** 初始化任务 */
+  _initQuests() {
+    this.quests = [
+      { id: 'kill_scout', name: '初试锋芒', desc: '击杀 3 个侦察机器人', target: 3, progress: 0, type: 'kill_scout', reward: '解锁近战武器', done: false },
+      { id: 'kill_heavy', name: '重装猎手', desc: '击杀 2 个重型机器人', target: 2, progress: 0, type: 'kill_heavy', reward: '解锁霰弹枪', done: false },
+      { id: 'kill_total', name: '战场老兵', desc: '累计击杀 10 个敌人', target: 10, progress: 0, type: 'kill_total', reward: '弹药补给', done: false },
+      { id: 'survive', name: '幸存者', desc: '存活 3 分钟不死亡', target: 180, progress: 0, type: 'survive', reward: '生命值恢复', done: false },
+      { id: 'headshot', name: '精准射手', desc: '命中敌人 20 次', target: 20, progress: 0, type: 'hit_enemy', reward: '伤害提升', done: false },
+      { id: 'explore', name: '探索者', desc: '移动距离超过 200 格', target: 200, progress: 0, type: 'distance', reward: '移动速度提升', done: false },
+    ];
+    this._surviveTimer = 0;
+    this._distanceTraveled = 0;
+    this._lastPlayerPos = null;
+  }
+
+  /** 更新任务进度 */
+  _updateQuests(dt) {
+    // 存活任务
+    if (!this.player.dead) {
+      this._surviveTimer += dt;
+    } else {
+      this._surviveTimer = 0;
+    }
+
+    // 移动距离任务
+    if (this._lastPlayerPos && !this.player.dead) {
+      const dx = this.player.position.x - this._lastPlayerPos.x;
+      const dz = this.player.position.z - this._lastPlayerPos.z;
+      this._distanceTraveled += Math.sqrt(dx * dx + dz * dz);
+    }
+    this._lastPlayerPos = this.player.position.clone();
+
+    // 更新任务进度
+    for (const q of this.quests) {
+      if (q.done) continue;
+      switch (q.type) {
+        case 'kill_scout':
+        case 'kill_heavy':
+        case 'kill_total':
+          // 这些在 _onEnemyKill 中更新
+          break;
+        case 'survive':
+          q.progress = Math.floor(this._surviveTimer);
+          if (q.progress >= q.target) { q.done = true; this._onQuestComplete(q); }
+          break;
+        case 'hit_enemy':
+          // 在 showHitMarker 中更新
+          break;
+        case 'distance':
+          q.progress = Math.floor(this._distanceTraveled);
+          if (q.progress >= q.target) { q.done = true; this._onQuestComplete(q); }
+          break;
+      }
+    }
+    this._renderQuests();
+  }
+
+  /** 任务完成回调 */
+  _onQuestComplete(quest) {
+    if (audio) audio.quest();
+    this._addKillFeed(`✦ 任务完成: ${quest.name}`, '#ffd700');
+
+    // 任务奖励
+    switch (quest.id) {
+      case 'kill_scout':
+        // 解锁战斧
+        this.inventory.addItem({ type: 'weapon', weaponType: 3 }); // AXE
+        break;
+      case 'kill_heavy':
+        // 解锁霰弹枪
+        this.inventory.addItem({ type: 'weapon', weaponType: 6 }); // SHOTGUN
+        break;
+      case 'kill_total':
+        // 弹药补给
+        this.inventory.addAmmo(30, 60, 12);
+        break;
+      case 'survive':
+        // 恢复生命值
+        this.player.hp = Math.min(this.player.maxHp, this.player.hp + 50);
+        break;
+      case 'headshot':
+        // 伤害提升在 WeaponManager 中处理
+        this.player.damageBonus = (this.player.damageBonus || 0) + 2;
+        break;
+      case 'explore':
+        // 速度提升
+        this.player.speedBoost = (this.player.speedBoost || 0) + 1;
+        break;
+    }
+  }
+
+  /** 渲染任务面板 */
+  _renderQuests() {
+    const questPanel = document.getElementById('questPanel');
+    if (!questPanel) return;
+
+    const activeQuests = this.quests.filter(q => !q.done);
+    if (activeQuests.length === 0) {
+      questPanel.innerHTML = '<div style="color:#ffd700;font-size:12px;padding:4px 8px;">✦ 全部任务完成！</div>';
+      return;
+    }
+
+    questPanel.innerHTML = activeQuests.map(q => {
+      const pct = Math.min(100, Math.floor(q.progress / q.target * 100));
+      const barColor = pct >= 100 ? '#4ade80' : '#60a5fa';
+      return `<div class="quest-item">
+        <div class="quest-name">${q.name}</div>
+        <div class="quest-desc">${q.desc}</div>
+        <div class="quest-bar"><div class="quest-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+        <div class="quest-progress">${q.progress}/${q.target}</div>
+      </div>`;
+    }).join('');
   }
 
   /** 显示死亡界面 */
@@ -1648,6 +1787,9 @@ class Game {
     if (this._ammoEl) {
       this._ammoEl.style.display = show ? 'block' : 'none';
     }
+    // 任务面板
+    const questPanel = document.getElementById('questPanel');
+    if (questPanel) questPanel.style.display = show ? 'block' : 'none';
   }
 
   _onResize() {
@@ -1679,8 +1821,10 @@ class Game {
 
     if (wDef.type === 'ranged') {
       this.weaponManager.shoot(weaponType, this.player);
+      audio.shoot();
     } else {
       this.weaponManager.meleeAttack(weaponType, this.player);
+      audio.swing();
     }
 
     this._updateHotbar();
@@ -1700,6 +1844,7 @@ class Game {
     }
 
     this.weaponManager.startReload(currentItem.weaponType);
+    audio.reload();
   }
 
   /** Q键快速切换武器 */
@@ -1899,6 +2044,17 @@ class Game {
       if (this.weaponManager) {
         const isMoving = this.player.keys['KeyW'] || this.player.keys['KeyA'] || this.player.keys['KeyS'] || this.player.keys['KeyD'];
         this.weaponManager.update(dt, isMoving, this.bobIntensity);
+
+        // 脚步声
+        if (isMoving && this.player.onGround) {
+          this._footstepTimer += dt;
+          if (this._footstepTimer > 0.45) {
+            this._footstepTimer = 0;
+            audio.footstep();
+          }
+        } else {
+          this._footstepTimer = 0.3; // 接近下次触发
+        }
       }
     }
 
@@ -1919,17 +2075,20 @@ class Game {
       this._updateDebugInfo();
     }
 
-    // 命中标记计时
+    // 命中标记计时 - 准心恢复
     if (this._hitMarkerTimer > 0) {
       this._hitMarkerTimer -= dt;
       if (this._hitMarkerTimer <= 0) {
-        const hm = document.getElementById('hitMarker');
-        if (hm) hm.classList.remove('active');
+        const crosshair = document.getElementById('crosshair');
+        if (crosshair) crosshair.classList.remove('hit');
       }
     }
 
     // 新手引导
     this._updateTutorial(dt);
+
+    // 任务系统
+    this._updateQuests(dt);
   }
 }
 
