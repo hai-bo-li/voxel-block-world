@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=21';
-import { AnimalManager } from './animals.js?v=21';
+} from './voxel.js?v=22';
+import { AnimalManager } from './animals.js?v=22';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=21';
-import { audio } from './audio.js?v=21';
+} from './weapons.js?v=22';
+import { audio } from './audio.js?v=22';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -528,7 +528,7 @@ class TouchController {
     canvas.addEventListener('touchstart', (e) => {
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
-        if (t.target && t.target.closest && t.target.closest('#actionButtons, #joystickZone, #mobileHotbar')) continue;
+        if (t.target && t.target.closest && t.target.closest('#actionButtons, #joystickZone, #mobileHotbar, #settingsPanel, #inventoryScreen, #questPanel')) continue;
         if (t.identifier !== this._joystickId && t.clientX > window.innerWidth * 0.35) {
           this._lookTouchId = t.identifier;
           this._lastTouchX = t.clientX;
