@@ -790,6 +790,19 @@ html, body {
   background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 50%);
 }
 
+/* 武器名称标签 */
+.weapon-name-label {
+  position: absolute;
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: #ccc;
+  white-space: nowrap;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
+
 /* 弹药图标 */
 .ammo-preview {
   border-radius: 50% !important;

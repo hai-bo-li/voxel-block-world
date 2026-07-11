@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=19';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=20';
 
 /* ============================================
    武器类型定义
@@ -14,6 +14,8 @@ export const WeaponType = {
   AXE: 'axe',
   PICKAXE: 'pickaxe',
   PISTOL: 'pistol',
+  SMG: 'smg',
+  SNIPER: 'sniper',
   RIFLE: 'rifle',
   SHOTGUN: 'shotgun',
 };
@@ -72,6 +74,40 @@ export const WeaponDefs = {
     ammoType: 'pistol',
     spread: 0.01,
     bodyColor: 0x546E7A,
+  },
+  [WeaponType.SMG]: {
+    name: '冲锋枪',
+    type: 'ranged',
+    damage: 3,
+    range: 40,
+    cooldown: 0.08,
+    blockDamage: 1,
+    bulletSpeed: 90,
+    bulletColor: 0x76FF03,
+    bulletSize: 0.06,
+    recoil: 0.008,
+    magSize: 40,
+    reloadTime: 1.8,
+    ammoType: 'smg',
+    spread: 0.04,
+    bodyColor: 0x455A64,
+  },
+  [WeaponType.SNIPER]: {
+    name: '狙击枪',
+    type: 'ranged',
+    damage: 25,
+    range: 150,
+    cooldown: 1.2,
+    blockDamage: 5,
+    bulletSpeed: 200,
+    bulletColor: 0xE040FB,
+    bulletSize: 0.12,
+    recoil: 0.08,
+    magSize: 5,
+    reloadTime: 2.5,
+    ammoType: 'sniper',
+    spread: 0.002,
+    bodyColor: 0x263238,
   },
   [WeaponType.RIFLE]: {
     name: '等离子步枪',
@@ -458,6 +494,55 @@ export class WeaponRenderer {
       const glowMat = new THREE.MeshBasicMaterial({ color: def.bulletColor });
       const glow = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), glowMat);
       glow.position.set(0.35, -0.27, -0.87);
+      this.weaponGroup.add(glow);
+    } else if (weaponType === WeaponType.SMG) {
+      // 冲锋枪 - 紧凑短小，弹鼓
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.32), mat);
+      body.position.set(0.35, -0.28, -0.45);
+      this.weaponGroup.add(body);
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.14), accentMat);
+      barrel.position.set(0.35, -0.26, -0.62);
+      this.weaponGroup.add(barrel);
+      // 弹鼓
+      const drum = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.06), new THREE.MeshLambertMaterial({ color: 0x37474F }));
+      drum.position.set(0.35, -0.38, -0.44);
+      this.weaponGroup.add(drum);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.04), mat);
+      grip.position.set(0.35, -0.37, -0.36);
+      grip.rotation.x = 0.2;
+      this.weaponGroup.add(grip);
+      const glowMat = new THREE.MeshBasicMaterial({ color: def.bulletColor });
+      const glow = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.02), glowMat);
+      glow.position.set(0.35, -0.26, -0.69);
+      this.weaponGroup.add(glow);
+    } else if (weaponType === WeaponType.SNIPER) {
+      // 狙击枪 - 长管，瞄准镜，支架
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.6), mat);
+      body.position.set(0.35, -0.28, -0.58);
+      this.weaponGroup.add(body);
+      // 长枪管
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.25), accentMat);
+      barrel.position.set(0.35, -0.26, -0.9);
+      this.weaponGroup.add(barrel);
+      // 瞄准镜
+      const scope = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.1), new THREE.MeshLambertMaterial({ color: 0x1B5E20 }));
+      scope.position.set(0.35, -0.2, -0.55);
+      this.weaponGroup.add(scope);
+      // 镜片
+      const lens = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.01), new THREE.MeshBasicMaterial({ color: 0x00E676 }));
+      lens.position.set(0.35, -0.2, -0.5);
+      this.weaponGroup.add(lens);
+      // 支架
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.15), mat);
+      stock.position.set(0.35, -0.3, -0.28);
+      this.weaponGroup.add(stock);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.04), mat);
+      grip.position.set(0.35, -0.38, -0.42);
+      grip.rotation.x = 0.15;
+      this.weaponGroup.add(grip);
+      const glowMat = new THREE.MeshBasicMaterial({ color: def.bulletColor });
+      const glow = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.04), glowMat);
+      glow.position.set(0.35, -0.26, -1.03);
       this.weaponGroup.add(glow);
     } else if (weaponType === WeaponType.SHOTGUN) {
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.4), mat);
@@ -915,28 +1000,29 @@ export class Inventory {
   }
 
   _initStarterItems() {
-    const starterItems = [
-      { type: 'block', blockType: BlockType.GRASS, count: 64 },
-      { type: 'block', blockType: BlockType.DIRT, count: 64 },
-      { type: 'block', blockType: BlockType.STONE, count: 64 },
-      { type: 'block', blockType: BlockType.SAND, count: 64 },
-      { type: 'block', blockType: BlockType.WOOD, count: 64 },
-      { type: 'block', blockType: BlockType.LEAVES, count: 64 },
-      { type: 'weapon', weaponType: WeaponType.SWORD, count: 1 },
-      { type: 'weapon', weaponType: WeaponType.PISTOL, count: 1 },
-      { type: 'weapon', weaponType: WeaponType.AXE, count: 1 },
-    ];
-
-    starterItems.forEach((item, i) => {
-      this.slots[i] = { ...item };
-    });
-
-    this.slots[9] = { type: 'weapon', weaponType: WeaponType.RIFLE, count: 1 };
-    this.slots[10] = { type: 'weapon', weaponType: WeaponType.SHOTGUN, count: 1 };
-    this.slots[11] = { type: 'weapon', weaponType: WeaponType.PICKAXE, count: 1 };
-    this.slots[12] = { type: 'ammo', ammoType: 'pistol', count: 120 };
-    this.slots[13] = { type: 'ammo', ammoType: 'rifle', count: 300 };
-    this.slots[14] = { type: 'ammo', ammoType: 'shotgun', count: 60 };
+    // 快捷栏 0-5: 武器 (对应数字键 1-6)
+    this.slots[0] = { type: 'weapon', weaponType: WeaponType.FIST, count: 1 };
+    this.slots[1] = { type: 'weapon', weaponType: WeaponType.SWORD, count: 1 };
+    this.slots[2] = { type: 'weapon', weaponType: WeaponType.PISTOL, count: 1 };
+    this.slots[3] = { type: 'weapon', weaponType: WeaponType.SNIPER, count: 1 };
+    this.slots[4] = { type: 'weapon', weaponType: WeaponType.SMG, count: 1 };
+    this.slots[5] = { type: 'weapon', weaponType: WeaponType.SHOTGUN, count: 1 };
+    // 快捷栏 6-8: 方块
+    this.slots[6] = { type: 'block', blockType: BlockType.GRASS, count: 64 };
+    this.slots[7] = { type: 'block', blockType: BlockType.STONE, count: 64 };
+    this.slots[8] = { type: 'block', blockType: BlockType.WOOD, count: 64 };
+    // 背包 (第二行起)
+    this.slots[9] = { type: 'weapon', weaponType: WeaponType.AXE, count: 1 };
+    this.slots[10] = { type: 'weapon', weaponType: WeaponType.PICKAXE, count: 1 };
+    this.slots[11] = { type: 'weapon', weaponType: WeaponType.RIFLE, count: 1 };
+    this.slots[12] = { type: 'block', blockType: BlockType.DIRT, count: 64 };
+    this.slots[13] = { type: 'block', blockType: BlockType.SAND, count: 64 };
+    this.slots[14] = { type: 'block', blockType: BlockType.LEAVES, count: 64 };
+    this.slots[15] = { type: 'ammo', ammoType: 'pistol', count: 120 };
+    this.slots[16] = { type: 'ammo', ammoType: 'smg', count: 300 };
+    this.slots[17] = { type: 'ammo', ammoType: 'sniper', count: 30 };
+    this.slots[18] = { type: 'ammo', ammoType: 'rifle', count: 300 };
+    this.slots[19] = { type: 'ammo', ammoType: 'shotgun', count: 60 };
   }
 
   getHotbarItem(index) {
@@ -1040,11 +1126,13 @@ export class Inventory {
   }
 
   /** 添加弹药 */
-  addAmmo(pistolAmmo, rifleAmmo, shotgunAmmo) {
+  addAmmo(pistolAmmo, rifleAmmo, shotgunAmmo, smgAmmo, sniperAmmo) {
     const ammoTypes = [
       { type: 'pistol', count: pistolAmmo },
       { type: 'rifle', count: rifleAmmo },
       { type: 'shotgun', count: shotgunAmmo },
+      { type: 'smg', count: smgAmmo || 0 },
+      { type: 'sniper', count: sniperAmmo || 0 },
     ];
     for (const a of ammoTypes) {
       if (a.count <= 0) continue;

@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=19';
-import { AnimalManager } from './animals.js?v=19';
+} from './voxel.js?v=20';
+import { AnimalManager } from './animals.js?v=20';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=19';
-import { audio } from './audio.js?v=19';
+} from './weapons.js?v=20';
+import { audio } from './audio.js?v=20';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1352,7 +1352,7 @@ class Game {
         break;
       case 'kill_total':
         // 弹药补给
-        this.inventory.addAmmo(30, 60, 12);
+        this.inventory.addAmmo(30, 60, 12, 60, 10);
         break;
       case 'survive':
         // 恢复生命值
@@ -1436,8 +1436,14 @@ class Game {
           preview.style.background = `#${wColor.toString(16).padStart(6, '0')}`;
           preview.style.boxShadow = `0 0 6px ${preview.style.background}`;
           preview.classList.add('weapon-preview');
+          if (wDef) {
+            const nameEl = document.createElement('span');
+            nameEl.className = 'weapon-name-label';
+            nameEl.textContent = wDef.name;
+            slot.appendChild(nameEl);
+          }
         } else if (item.type === 'ammo') {
-          const ammoColors = { pistol: '#FFEB3B', rifle: '#00E5FF', shotgun: '#FF6D00' };
+          const ammoColors = { pistol: '#FFEB3B', rifle: '#00E5FF', shotgun: '#FF6D00', smg: '#76FF03', sniper: '#E040FB' };
           preview.style.background = ammoColors[item.ammoType] || '#888';
           preview.style.boxShadow = `0 0 4px ${preview.style.background}`;
           preview.classList.add('ammo-preview');
