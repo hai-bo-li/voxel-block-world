@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=22';
-import { AnimalManager } from './animals.js?v=22';
+} from './voxel.js?v=23';
+import { AnimalManager } from './animals.js?v=23';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=22';
-import { audio } from './audio.js?v=22';
+} from './weapons.js?v=23';
+import { audio } from './audio.js?v=23';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -780,11 +780,12 @@ class Game {
 
     this.ui.loadingBar.style.display = 'block';
 
-    const radius = this.renderDistance;
+    // 快速启动：只加载半径2的区块（约12个），其余在游戏运行中加载
+    const startupRadius = 2;
     const chunksToLoad = [];
-    for (let dx = -radius; dx <= radius; dx++) {
-      for (let dz = -radius; dz <= radius; dz++) {
-        if (dx * dx + dz * dz > radius * radius) continue;
+    for (let dx = -startupRadius; dx <= startupRadius; dx++) {
+      for (let dz = -startupRadius; dz <= startupRadius; dz++) {
+        if (dx * dx + dz * dz > startupRadius * startupRadius) continue;
         chunksToLoad.push([dx, dz]);
       }
     }
@@ -796,7 +797,6 @@ class Game {
 
     const needed = chunksToLoad.length;
     let generated = 0;
-    let firstFrameDone = false;
 
     for (const [cx, cz] of chunksToLoad) {
       const key = this.world.chunkKey(cx, cz);
@@ -806,17 +806,11 @@ class Game {
         if (chunk.waterMesh) this.scene.add(chunk.waterMesh);
         generated++;
         this.ui.loadingFill.style.width = `${(generated / needed * 100) | 0}%`;
-
-        if (!firstFrameDone && cx * cx + cz * cz <= 4) {
-          try { this.renderer.render(this.scene, this.camera); } catch(e) {}
-          firstFrameDone = true;
-        }
-
-        try { this.renderer.render(this.scene, this.camera); } catch(e) {}
-        if (generated % (this.isMobile ? 1 : 3) === 0) {
+        if (generated % 2 === 0) {
           await new Promise(r => setTimeout(r, 0));
         }
       }
+    }
     }
 
     this._spawnX = 5.4;
@@ -1194,6 +1188,53 @@ class Game {
     for (const q of this.quests) {
       if (q.done) continue;
       if (q.type === 'hit_enemy') { q.progress++; if (q.progress >= q.target) { q.done = true; this._onQuestComplete(q); } }
+    }
+  }
+
+  /** 狙击枪倍镜覆盖层 */
+  _showScopeOverlay(show) {
+    let overlay = document.getElementById('scopeOverlay');
+    if (show) {
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'scopeOverlay';
+        overlay.style.cssText = `
+          position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;pointer-events:none;
+          background:radial-gradient(circle at center,transparent 28%,rgba(0,0,0,0.95) 34%);
+        `;
+        // 十字线
+        const cross = document.createElement('div');
+        cross.style.cssText = `
+          position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+          width:60%;height:60%;pointer-events:none;
+        `;
+        // 水平线
+        const hLine = document.createElement('div');
+        hLine.style.cssText = `position:absolute;top:50%;left:0;width:100%;height:1px;background:rgba(0,0,0,0.6);`;
+        // 垂直线
+        const vLine = document.createElement('div');
+        vLine.style.cssText = `position:absolute;left:50%;top:0;height:100%;width:1px;background:rgba(0,0,0,0.6);`;
+        // 中心点
+        const dot = document.createElement('div');
+        dot.style.cssText = `position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:4px;height:4px;background:red;border-radius:50%;`;
+        cross.appendChild(hLine);
+        cross.appendChild(vLine);
+        cross.appendChild(dot);
+        overlay.appendChild(cross);
+        document.body.appendChild(overlay);
+      } else {
+        overlay.style.display = 'block';
+      }
+      // 隐藏武器模型
+      if (this.weaponManager && this.weaponManager.renderer && this.weaponManager.renderer.weaponGroup) {
+        this.weaponManager.renderer.weaponGroup.visible = false;
+      }
+    } else {
+      if (overlay) overlay.style.display = 'none';
+      // 显示武器模型
+      if (this.weaponManager && this.weaponManager.renderer && this.weaponManager.renderer.weaponGroup) {
+        this.weaponManager.renderer.weaponGroup.visible = true;
+      }
     }
   }
 
@@ -1656,8 +1697,16 @@ class Game {
           const wDef = WeaponDefs[currentItem.weaponType];
           if (wDef && wDef.type === 'ranged') {
             this.isAiming = true;
-            this.camera.fov = this.fov * 0.67;
-            this.camera.updateProjectionMatrix();
+            this.weaponManager.renderer.setScopeActive(true);
+            if (currentItem.weaponType === WeaponType.SNIPER) {
+              // 狙击枪开倍镜：8倍放大 + 全屏黑边 + 十字准线
+              this.camera.fov = this.fov * 0.12;
+              this.camera.updateProjectionMatrix();
+              this._showScopeOverlay(true);
+            } else {
+              this.camera.fov = this.fov * 0.67;
+              this.camera.updateProjectionMatrix();
+            }
           }
         } else {
           this.player.breakBlock();
@@ -1669,8 +1718,10 @@ class Game {
     document.addEventListener('mouseup', (e) => {
       if (e.button === 2 && this.isAiming) {
         this.isAiming = false;
+        this.weaponManager.renderer.setScopeActive(false);
         this.camera.fov = this.fov;
         this.camera.updateProjectionMatrix();
+        this._showScopeOverlay(false);
       }
     });
 

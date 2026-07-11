@@ -1501,6 +1501,92 @@ html, body {
   opacity: 1;
 }
 
+/* ===== 狙击枪倍镜覆盖层 ===== */
+#scopeOverlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 100;
+  display: none;
+  /* 圆形倍镜视野 - 黑色遮罩 */
+  background: radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.95) 32%);
+}
+
+#scopeOverlay.active {
+  display: block;
+}
+
+.scope-crosshair-h {
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: rgba(0,0,0,0.7);
+  transform: translateY(-0.5px);
+}
+
+.scope-crosshair-v {
+  position: absolute;
+  left: 50%;
+  top: 10%;
+  bottom: 10%;
+  width: 1px;
+  background: rgba(0,0,0,0.7);
+  transform: translateX(-0.5px);
+}
+
+.scope-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  background: #ff3333;
+  border-radius: 50%;
+  transform: translate(-2px, -2px);
+}
+
+/* 倍镜刻度线 */
+#scopeOverlay::before,
+#scopeOverlay::after {
+  content: '';
+  position: absolute;
+  background: rgba(0,0,0,0.5);
+}
+
+/* 水平刻度 */
+#scopeOverlay::before {
+  top: 50%;
+  left: 25%;
+  width: 50%;
+  height: 1px;
+  transform: translateY(-0.5px);
+  background: repeating-linear-gradient(
+    to right,
+    rgba(0,0,0,0.4) 0px,
+    rgba(0,0,0,0.4) 8px,
+    transparent 8px,
+    transparent 20px
+  );
+}
+
+/* 垂直刻度 */
+#scopeOverlay::after {
+  left: 50%;
+  top: 25%;
+  height: 50%;
+  width: 1px;
+  transform: translateX(-0.5px);
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0,0,0,0.4) 0px,
+    rgba(0,0,0,0.4) 8px,
+    transparent 8px,
+    transparent 20px
+  );
+}
+
 .dmg-arrow.top { top: 0; left: 50%; transform: translateX(-50%); }
 .dmg-arrow.bottom { bottom: 0; left: 50%; transform: translateX(-50%) rotate(180deg); }
 .dmg-arrow.left { left: 0; top: 50%; transform: translateY(-50%) rotate(-90deg); }
@@ -1718,9 +1804,10 @@ body {
     left: 2px;
   }
 
-  /* 摇杆区域 - 紧凑 */
+  /* 摇杆区域 - 远离左边缘 */
   #joystickZone {
-    left: 8px;
+    left: env(safe-area-inset-left, 16px);
+    margin-left: 24px;
     bottom: 46px;
     width: 90px;
     height: 90px;
@@ -1825,11 +1912,11 @@ body {
 
 /* 竖屏手机适配 */
 @media (max-width: 500px) and (pointer: coarse) {
-  /* 摇杆更小 */
+  /* 摇杆更小 - 远离左边缘 */
   #joystickZone {
     width: 100px;
     height: 100px;
-    left: 10px;
+    left: 24px;
     bottom: 120px;
   }
   #joystickThumb {
@@ -1919,5 +2006,8 @@ body {
   }
   #killFeed {
     max-width: 90px;
+  }
+  #scopeOverlay .scope-cross {
+    display: none;
   }
 }

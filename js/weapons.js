@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=22';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=23';
 
 /* ============================================
    武器类型定义
@@ -387,6 +387,9 @@ export class WeaponRenderer {
     this.recoilPhase = 0;
     this.bobPhase = 0;
     this.swingStartTime = 0;
+    this.reloadAnim = 0;       // 0~1 换弹动画进度
+    this.isReloading = false;
+    this.scopeActive = false;  // 狙击枪瞄准镜状态
   }
 
   /** 切换武器 */
@@ -596,13 +599,19 @@ export class WeaponRenderer {
       this.recoilPhase = Math.max(0, this.recoilPhase - dt * 8);
     }
 
+    // 换弹动画进度递减
+    if (this.isReloading) {
+      this.reloadAnim = Math.min(1, this.reloadAnim + dt * 2.5);
+    } else {
+      this.reloadAnim = Math.max(0, this.reloadAnim - dt * 4);
+    }
+
     // 增强的挥砍动画 - 剑类武器大幅度横劈
     const isSword = this.currentWeapon === WeaponType.SWORD;
     const isMelee = [WeaponType.FIST, WeaponType.SWORD, WeaponType.AXE, WeaponType.PICKAXE].includes(this.currentWeapon);
 
     let swingAngle, swingRotZ;
     if (isSword && this.swingPhase > 0) {
-      // 光剑：大幅度横劈 + 旋转
       const t = 1 - this.swingPhase;
       swingAngle = Math.sin(t * Math.PI) * Math.PI * 0.9;
       swingRotZ = Math.sin(t * Math.PI) * 0.5;
@@ -616,8 +625,46 @@ export class WeaponRenderer {
 
     const recoilZ = this.recoilPhase * 0.08;
 
-    this.weaponGroup.position.set(bobX, bobY - recoilZ * 0.3, -recoilZ);
-    this.weaponGroup.rotation.set(-swingAngle * 0.5, 0, swingRotZ || -swingAngle * 0.3);
+    // 换弹动画：武器下沉 → 弹匣弹出 → 装填 → 归位
+    let reloadOffsetY = 0;
+    let reloadOffsetZ = 0;
+    let reloadRotX = 0;
+    if (this.reloadAnim > 0) {
+      const t = this.reloadAnim;
+      if (t < 0.3) {
+        // 阶段1：武器下沉
+        const p = t / 0.3;
+        reloadOffsetY = -p * 0.15;
+        reloadRotX = p * 0.4;
+      } else if (t < 0.6) {
+        // 阶段2：弹匣弹出（快速下移）
+        const p = (t - 0.3) / 0.3;
+        reloadOffsetY = -0.15 - p * 0.1;
+        reloadOffsetZ = p * 0.05;
+        reloadRotX = 0.4 + p * 0.2;
+      } else {
+        // 阶段3：装填归位
+        const p = (t - 0.6) / 0.4;
+        const ease = 1 - Math.pow(1 - p, 3); // easeOutCubic
+        reloadOffsetY = -0.25 * (1 - ease);
+        reloadOffsetZ = 0.05 * (1 - ease);
+        reloadRotX = 0.6 * (1 - ease);
+      }
+    }
+
+    // 狙击枪瞄准镜时减少摆动
+    const scopeFactor = this.scopeActive ? 0.1 : 1.0;
+
+    this.weaponGroup.position.set(
+      bobX * scopeFactor,
+      bobY * scopeFactor + reloadOffsetY - recoilZ * 0.3,
+      -recoilZ + reloadOffsetZ
+    );
+    this.weaponGroup.rotation.set(
+      -swingAngle * 0.5 + reloadRotX,
+      0,
+      swingRotZ || -swingAngle * 0.3
+    );
 
     if (!this.weaponGroup.parent) {
       this.camera.add(this.weaponGroup);
