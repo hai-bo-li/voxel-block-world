@@ -4,8 +4,8 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=13';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=13';
+import { BlockType, isSolid } from './voxel.js?v=15';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=15';
 
 /* ============================================
    常量配置
@@ -106,17 +106,15 @@ class Robot {
 
     // 血条背景
     const bgGeo = new THREE.PlaneGeometry(0.8, 0.08);
-    const bgMat = new THREE.MeshBasicMaterial({ color: 0x333333, side: THREE.DoubleSide, depthTest: false });
+    const bgMat = new THREE.MeshBasicMaterial({ color: 0x333333, side: THREE.DoubleSide });
     const bg = new THREE.Mesh(bgGeo, bgMat);
-    bg.renderOrder = 1000;
     barGroup.add(bg);
 
     // 血条前景
     const fgGeo = new THREE.PlaneGeometry(0.76, 0.05);
-    const fgMat = new THREE.MeshBasicMaterial({ color: 0x4CAF50, side: THREE.DoubleSide, depthTest: false });
+    const fgMat = new THREE.MeshBasicMaterial({ color: 0x4CAF50, side: THREE.DoubleSide });
     const fg = new THREE.Mesh(fgGeo, fgMat);
     fg.position.z = 0.001;
-    fg.renderOrder = 1001;
     barGroup.add(fg);
 
     this._healthBarFill = fg;
@@ -124,7 +122,6 @@ class Robot {
 
     // 血条放在头顶
     barGroup.position.y = 1.6;
-    barGroup.renderOrder = 1000;
     this.group.add(barGroup);
     this._healthBar = barGroup;
   }
@@ -306,10 +303,8 @@ class Robot {
     // 受击闪烁效果
     if (this.hitFlashTimer > 0) {
       this.hitFlashTimer -= dt;
-      // 让整个模型闪白
       this.group.traverse(child => {
-        if (child.isMesh && child.material) {
-          child.material.emissive = child.material.emissive || new THREE.Color(0x000000);
+        if (child.isMesh && child.material && child.material.type === 'MeshLambertMaterial') {
           if (this.hitFlashTimer > 0) {
             child.material.emissive.setHex(0xFFFFFF);
           } else {

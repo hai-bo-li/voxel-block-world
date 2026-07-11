@@ -8,12 +8,12 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=13';
-import { AnimalManager } from './animals.js?v=13';
+} from './voxel.js?v=15';
+import { AnimalManager } from './animals.js?v=15';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=13';
+} from './weapons.js?v=15';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -745,11 +745,11 @@ class Game {
         this.ui.loadingFill.style.width = `${(generated / needed * 100) | 0}%`;
 
         if (!firstFrameDone && cx * cx + cz * cz <= 4) {
-          this.renderer.render(this.scene, this.camera);
+          try { this.renderer.render(this.scene, this.camera); } catch(e) {}
           firstFrameDone = true;
         }
 
-        this.renderer.render(this.scene, this.camera);
+        try { this.renderer.render(this.scene, this.camera); } catch(e) {}
         if (generated % (this.isMobile ? 1 : 3) === 0) {
           await new Promise(r => setTimeout(r, 0));
         }
@@ -1576,7 +1576,11 @@ class Game {
     }
 
     // 渲染
-    this.renderer.render(this.scene, this.camera);
+    try {
+      this.renderer.render(this.scene, this.camera);
+    } catch (e) {
+      console.error('[Game] 渲染错误:', e.message, e.stack);
+    }
 
     // 更新UI（降低频率）
     if (this.frameCount % 10 === 0) {
