@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=24';
-import { AnimalManager } from './animals.js?v=24';
+} from './voxel.js?v=25';
+import { AnimalManager } from './animals.js?v=25';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=24';
-import { audio } from './audio.js?v=24';
+} from './weapons.js?v=25';
+import { audio } from './audio.js?v=25';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -612,11 +612,69 @@ class TouchController {
     }
 
     if (btnAttack) {
+      let _attackHoldTimer = null;
       btnAttack.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.game._weaponAttack();
+        // 狙击枪长按开镜
+        const wType = this.game.weaponManager.currentWeapon;
+        const wDef = WeaponDefs[wType];
+        if (wDef && wDef.category === 'ranged' && wDef.scopeZoom) {
+          _attackHoldTimer = setTimeout(() => {
+            this.game._toggleScope(true);
+            _attackHoldTimer = 'scoped';
+          }, 300);
+        } else {
+          this.game._weaponAttack();
+        }
         _flashBtn(btnAttack);
+      });
+      btnAttack.addEventListener('pointerup', (e) => {
+        e.preventDefault();
+        if (_attackHoldTimer === 'scoped') {
+          this.game._weaponAttack();
+          this.game._toggleScope(false);
+        } else if (_attackHoldTimer) {
+          clearTimeout(_attackHoldTimer);
+          this.game._weaponAttack();
+        }
+        _attackHoldTimer = null;
+      });
+      btnAttack.addEventListener('pointercancel', (e) => {
+        if (_attackHoldTimer && _attackHoldTimer !== 'scoped') clearTimeout(_attackHoldTimer);
+        if (_attackHoldTimer === 'scoped') this.game._toggleScope(false);
+        _attackHoldTimer = null;
+      });
+      btnAttack.addEventListener('pointerleave', (e) => {
+        if (_attackHoldTimer && _attackHoldTimer !== 'scoped') clearTimeout(_attackHoldTimer);
+        if (_attackHoldTimer === 'scoped') this.game._toggleScope(false);
+        _attackHoldTimer = null;
+      });
+    }
+
+    const btnAim = document.getElementById('btnAim');
+    if (btnAim) {
+      btnAim.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.game._toggleScope(true);
+        _flashBtn(btnAim);
+      });
+      btnAim.addEventListener('pointerup', (e) => {
+        e.preventDefault();
+        this.game._toggleScope(false);
+      });
+      btnAim.addEventListener('pointercancel', () => this.game._toggleScope(false));
+      btnAim.addEventListener('pointerleave', () => this.game._toggleScope(false));
+    }
+
+    const btnFullscreen = document.getElementById('btnFullscreen');
+    if (btnFullscreen) {
+      btnFullscreen.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.game._toggleFullscreen();
+        _flashBtn(btnFullscreen);
       });
     }
 
@@ -823,6 +881,15 @@ class Game {
 
     this.animalManager.spawnAnimals();
     this.animalManager.setPlayer(this.player);
+
+    // 延迟3秒后生成文字立墙（避免启动时卡顿）
+    this._textLoaded = false;
+    setTimeout(() => {
+      if (this.world && !this._textLoaded) {
+        this.world.enableText();
+        this._textLoaded = true;
+      }
+    }, 3000);
   }
 
   _createChunk(cx, cz) {
@@ -1187,6 +1254,41 @@ class Game {
     for (const q of this.quests) {
       if (q.done) continue;
       if (q.type === 'hit_enemy') { q.progress++; if (q.progress >= q.target) { q.done = true; this._onQuestComplete(q); } }
+    }
+  }
+
+  /** 切换狙击枪倍镜 */
+  _toggleScope(on) {
+    if (!this.weaponManager) return;
+    const def = WeaponDefs[this.weaponManager.currentWeapon];
+    if (!def || def.type !== 'ranged') return;
+    if (on) {
+      if (def.ammoType === 'sniper') {
+        // 狙击枪开倍镜
+        this.isAiming = true;
+        this.targetFov = this.fov * 0.27; // 约20度
+        this._showScopeOverlay(true);
+      } else {
+        // 其他远程武器普通瞄准
+        this.isAiming = true;
+        this.targetFov = this.fov * 0.67;
+      }
+    } else {
+      this.isAiming = false;
+      this.targetFov = this.fov;
+      this._showScopeOverlay(false);
+    }
+  }
+
+  /** 切换全屏 */
+  _toggleFullscreen() {
+    const el = document.documentElement;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      if (el.requestFullscreen) el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
     }
   }
 
@@ -1664,6 +1766,12 @@ class Game {
         this._quickSwapWeapon();
       }
 
+      // F11全屏
+      if (e.code === 'F11' && this.isRunning) {
+        e.preventDefault();
+        this._toggleFullscreen();
+      }
+
       // Tab键打开设置
       if (e.code === 'Tab' && this.isRunning) {
         e.preventDefault();
@@ -1695,17 +1803,8 @@ class Game {
         if (currentItem && currentItem.type === 'weapon') {
           const wDef = WeaponDefs[currentItem.weaponType];
           if (wDef && wDef.type === 'ranged') {
-            this.isAiming = true;
+            this._toggleScope(true);
             this.weaponManager.renderer.setScopeActive(true);
-            if (currentItem.weaponType === WeaponType.SNIPER) {
-              // 狙击枪开倍镜：8倍放大 + 全屏黑边 + 十字准线
-              this.camera.fov = this.fov * 0.12;
-              this.camera.updateProjectionMatrix();
-              this._showScopeOverlay(true);
-            } else {
-              this.camera.fov = this.fov * 0.67;
-              this.camera.updateProjectionMatrix();
-            }
           }
         } else {
           this.player.breakBlock();
@@ -1716,11 +1815,8 @@ class Game {
     // 鼠标释放：停止瞄准
     document.addEventListener('mouseup', (e) => {
       if (e.button === 2 && this.isAiming) {
-        this.isAiming = false;
+        this._toggleScope(false);
         this.weaponManager.renderer.setScopeActive(false);
-        this.camera.fov = this.fov;
-        this.camera.updateProjectionMatrix();
-        this._showScopeOverlay(false);
       }
     });
 

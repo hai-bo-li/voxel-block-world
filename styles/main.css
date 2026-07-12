@@ -840,6 +840,21 @@ html, body {
   border-color: rgba(255, 100, 100, 0.4) !important;
 }
 
+/* 瞄准按钮样式 */
+#btnAim {
+  background: rgba(50, 120, 220, 0.6) !important;
+  border-color: rgba(100, 160, 255, 0.4) !important;
+}
+
+/* 全屏按钮样式 */
+#btnFullscreen {
+  background: rgba(100, 100, 100, 0.6) !important;
+  border-color: rgba(160, 160, 160, 0.4) !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  padding: 2px !important;
+}
+
 /* ============================================
    武器第一人称渲染叠加
    ============================================ */

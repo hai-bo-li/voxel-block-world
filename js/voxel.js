@@ -466,6 +466,7 @@ export class World {
     this.material = null;
     this.pendingChunks = [];
     this.renderDistance = RENDER_DISTANCE;
+    this.textEnabled = false; // 文字立墙延迟加载
   }
 
   init() {
@@ -568,6 +569,24 @@ export class World {
     return BlockType.AIR;
   }
 
+  /** 延迟启用文字立墙并重新生成相关区块 */
+  enableText() {
+    this.textEnabled = true;
+    // 找出文字区域内的区块并标记为脏
+    const RX = World.TEXT_FLAT_RADIUS_X;
+    const RZ = World.TEXT_FLAT_RADIUS_Z;
+    const cxMin = Math.floor(-RX / CHUNK_SIZE);
+    const cxMax = Math.floor(RX / CHUNK_SIZE);
+    const czMin = Math.floor(-RZ / CHUNK_SIZE);
+    const czMax = Math.floor(RZ / CHUNK_SIZE);
+    for (const [key, chunk] of this.chunks) {
+      if (chunk.cx >= cxMin && chunk.cx <= cxMax && chunk.cz >= czMin && chunk.cz <= czMax) {
+        chunk.data = null; // 强制重新生成数据
+        chunk.dirty = true;
+      }
+    }
+  }
+
   _isInTextZone(cx, cz) {
     const x0 = cx * CHUNK_SIZE, x1 = x0 + 15;
     const z0 = cz * CHUNK_SIZE, z1 = z0 + 15;
@@ -592,8 +611,8 @@ export class World {
             let b;
             if (y < GY - 5)              b = BlockType.STONE;
             else if (y < GY)             b = BlockType.DIRT;
-            else if (y === GY)           b = BlockType.GRASS;
-            else if (y >= World.TEXT_BASE_Y && y <= World.TEXT_BASE_Y + World.LETTER_SIZE - 1) {
+            else if (y === GY)           b = BlockType.SAND; // 平地用沙
+            else if (this.textEnabled && y >= World.TEXT_BASE_Y && y <= World.TEXT_BASE_Y + World.LETTER_SIZE - 1) {
               b = this._getTextBlock(wx, y, wz);
             } else                       b = BlockType.AIR;
             chunk.setBlock(lx, y, lz, b);

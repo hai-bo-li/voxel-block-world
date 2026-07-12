@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=24';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=25';
 
 /* ============================================
    武器类型定义
