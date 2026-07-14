@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=53';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=53';
-import { audio } from './audio.js?v=53';
+import { BlockType, isSolid } from './voxel.js?v=54';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=54';
+import { audio } from './audio.js?v=54';
 
 /* ============================================
    常量配置
@@ -64,6 +64,9 @@ class Robot {
     // 碰撞体
     this.collisionWidth = 0.7;
     this.collisionHeight = 0.9;
+
+    // 血条高度（子类可覆盖）
+    this.healthBarY = 1.6;
 
     // HP系统
     this.maxHP = 30;
@@ -130,9 +133,16 @@ class Robot {
     this._healthBarFillScale = 0.76;
 
     // 血条放在头顶
-    barGroup.position.y = 1.6;
+    barGroup.position.y = this.healthBarY;
     this.group.add(barGroup);
     this._healthBar = barGroup;
+  }
+
+  /** 重新定位血条高度（子类构造函数中调用） */
+  _repositionHealthBar() {
+    if (this._healthBar) {
+      this._healthBar.position.y = this.healthBarY;
+    }
   }
 
   /** 更新血条显示 */
@@ -696,6 +706,8 @@ class ScoutBot extends Robot {
     this.attackType = 'melee';
     this.attackDamage = DAMAGE_MELEE_SCOUT;
     this.attackRange = ATTACK_RANGE_MELEE;
+    this.healthBarY = 1.35;
+    this._repositionHealthBar();
 
     this._buildModel();
     this._updateHealthBar();
@@ -794,6 +806,8 @@ class HeavyBot extends Robot {
     this.attackType = 'ranged';
     this.attackDamage = DAMAGE_RANGED_HEAVY;
     this.attackRange = ATTACK_RANGE_RANGED;
+    this.healthBarY = 1.5;
+    this._repositionHealthBar();
 
     this._buildModel();
     this._updateHealthBar();
@@ -934,6 +948,9 @@ export class FlyerBot extends Robot {
     this.divePhase = false;
     this.diveTimer = 0;
     this.attackTimer = 0;
+    this.collisionWidth = 0.8;
+    this.healthBarY = 0.7;
+    this._repositionHealthBar();
     this._buildModel();
     this._updateHealthBar();
   }
@@ -1067,6 +1084,10 @@ export class BruteBot extends Robot {
     this.attackCooldown = 1.8;
     this.attackTimer = 0;
     this.height = 1.6;
+    this.collisionWidth = 1.1;
+    this.collisionHeight = 1.8;
+    this.healthBarY = 2.1;
+    this._repositionHealthBar();
     this._buildModel();
     this._updateHealthBar();
   }
@@ -1175,7 +1196,11 @@ export class SpiderBot extends Robot {
     this.attackCooldown = 0.8;
     this.attackTimer = 0;
     this.height = 0.5;
+    this.collisionWidth = 0.9;
+    this.collisionHeight = 0.6;
     this._legPhase = 0;
+    this.healthBarY = 0.7;
+    this._repositionHealthBar();
     this._buildModel();
     this._updateHealthBar();
   }
@@ -1334,6 +1359,41 @@ export class AnimalManager {
     return 1;
   }
 
+  /** 怪物之间防重叠：距离过近时互相推开 */
+  _applySeparation(dt) {
+    const pushForce = 6.0; // 推开力度
+    const aliveRobots = this.robots.filter(r => r.alive);
+    for (let i = 0; i < aliveRobots.length; i++) {
+      const a = aliveRobots[i];
+      // 飞行单位不做地面分离
+      if (a.robotType === 'flyer') continue;
+      for (let j = i + 1; j < aliveRobots.length; j++) {
+        const b = aliveRobots[j];
+        if (b.robotType === 'flyer') continue;
+        const dx = b.position.x - a.position.x;
+        const dz = b.position.z - a.position.z;
+        const distSq = dx * dx + dz * dz;
+        const minD = (a.collisionWidth + b.collisionWidth) * 0.5 + 0.3;
+        if (distSq < minD * minD && distSq > 0.001) {
+          const dist = Math.sqrt(distSq);
+          const overlap = minD - dist;
+          const nx = dx / dist;
+          const nz = dz / dist;
+          const push = overlap * pushForce * dt;
+          a.position.x -= nx * push;
+          a.position.z -= nz * push;
+          b.position.x += nx * push;
+          b.position.z += nz * push;
+          // 同步 group 位置
+          a.group.position.x = a.position.x;
+          a.group.position.z = a.position.z;
+          b.group.position.x = b.position.x;
+          b.group.position.z = b.position.z;
+        }
+      }
+    }
+  }
+
   update(dt) {
     // 更新存活的机器人
     for (const robot of this.robots) {
@@ -1341,6 +1401,9 @@ export class AnimalManager {
         robot.update(dt, this.spawnCenter);
       }
     }
+
+    // 怪物之间防重叠（分离力）
+    this._applySeparation(dt);
 
     // 将死亡机器人加入重生队列
     const deadRobots = this.robots.filter(r => !r.alive);
