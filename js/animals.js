@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=56';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=56';
-import { audio } from './audio.js?v=56';
+import { BlockType, isSolid } from './voxel.js?v=57';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=57';
+import { audio } from './audio.js?v=57';
 
 /* ============================================
    常量配置
@@ -934,7 +934,7 @@ class HeavyBot extends Robot {
 }
 
 /* ============================================
-   飞行机器人 FlyerBot - 空中追击+俯冲攻击
+   飞行机器人 FlyerBot - 空中悬停+远程射击
    ============================================ */
 export class FlyerBot extends Robot {
   constructor(scene, world, x, y, z) {
@@ -944,14 +944,13 @@ export class FlyerBot extends Robot {
     this.robotType = 'flyer';
     this.speed = 3.5;
     this.attackDamage = 4;
-    this.attackRange = 2.0;
+    this.attackRange = 18;        // 远程射击距离
     this.detectRange = 28;
-    this.attackCooldown = 1.5;
+    this.attackCooldown = 1.2;    // 射击冷却
     this.hoverHeight = 5 + Math.random() * 3; // 5-8格高
-    this.divePhase = false;
-    this.diveTimer = 0;
     this.attackTimer = 0;
     this.collisionWidth = 0.8;
+    this.collisionHeight = 0.9;
     this.healthBarY = 0.7;
     this._repositionHealthBar();
     this._buildModel();
@@ -1020,36 +1019,41 @@ export class FlyerBot extends Robot {
 
     if (dist < this.detectRange) {
       this.state = 'chase';
-      // 飞行移动 - 保持高度，水平追击玩家
+      // 始终保持悬停高度，不俯冲
       const hoverTarget = p.position.y + this.hoverHeight;
-      const targetY = this.divePhase ? p.position.y + 1 : hoverTarget;
 
-      if (!this.divePhase && dist < 8 && Math.abs(dy) < 6) {
-        // 俯冲攻击
-        this.divePhase = true;
-        this.diveTimer = 0.8;
+      // 水平追击 — 保持一定距离，不贴近玩家
+      const horizDist = Math.sqrt(dx * dx + dz * dz);
+      const idealDist = 10; // 保持 10 格距离射击
+      if (horizDist > idealDist + 1) {
+        const nx = dx / (horizDist + 0.01);
+        const nz = dz / (horizDist + 0.01);
+        this.position.x += nx * this.speed * dt;
+        this.position.z += nz * this.speed * dt;
+      } else if (horizDist < idealDist - 1) {
+        // 太近了，后退
+        const nx = dx / (horizDist + 0.01);
+        const nz = dz / (horizDist + 0.01);
+        this.position.x -= nx * this.speed * 0.6 * dt;
+        this.position.z -= nz * this.speed * 0.6 * dt;
+      } else {
+        // 在理想距离内，围绕玩家侧移
+        const perpX = -dz / (horizDist + 0.01);
+        const perpZ = dx / (horizDist + 0.01);
+        const strafeDir = Math.sin(performance.now() * 0.0008) > 0 ? 1 : -1;
+        this.position.x += perpX * this.speed * 0.5 * strafeDir * dt;
+        this.position.z += perpZ * this.speed * 0.5 * strafeDir * dt;
       }
-      if (this.divePhase) {
-        this.diveTimer -= dt;
-        if (this.diveTimer <= 0) {
-          this.divePhase = false;
-        }
-      }
 
-      const nx = dx / (dist + 0.01);
-      const nz = dz / (dist + 0.01);
-      this.position.x += nx * this.speed * dt;
-      this.position.z += nz * this.speed * dt;
-      // 平滑Y轴移动
-      const yDiff = targetY - this.position.y;
-      this.position.y += yDiff * (this.divePhase ? 6 : 2) * dt;
+      // 平滑Y轴 — 始终保持悬停高度
+      const yDiff = hoverTarget - this.position.y;
+      this.position.y += yDiff * 2 * dt;
 
-      // 攻击
+      // 远程射击
       if (dist < this.attackRange) {
         if (this.attackTimer <= 0) {
-          this._attack(p);
+          this._fireProjectile();
           this.attackTimer = this.attackCooldown;
-          this.divePhase = false; // 攻击后拉起
         }
       }
     } else {
@@ -1058,7 +1062,7 @@ export class FlyerBot extends Robot {
       this.position.y += Math.sin(performance.now() * 0.002) * 0.02;
     }
 
-    // 面朝玩家方向（模型朝 +Z，需偏移）
+    // 面朝玩家方向
     this.targetRotation = Math.atan2(dx, dz);
     const rDiff = this.targetRotation - this.rotation;
     let shortDiff = ((rDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
