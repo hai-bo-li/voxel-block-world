@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=59';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=60';
 
 /* ============================================
    武器类型定义
@@ -1566,6 +1566,9 @@ export class WeaponManager {
         p.material.transparent = true;
       }
     }
+
+    // 同步换弹状态到渲染器
+    this.renderer.isReloading = this.isReloading;
 
     // 更新武器渲染
     this.renderer.update(dt, isMoving, bobIntensity || 1.0);
