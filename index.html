@@ -176,6 +176,11 @@
         <input type="range" id="settingSmooth" min="1" max="10" value="5" />
         <span id="settingSmoothVal">5</span>
       </div>
+      <div class="setting-row">
+        <label>瞄准灵敏度</label>
+        <input type="range" id="settingAimSens" min="1" max="20" value="3" />
+        <span id="settingAimSensVal">3</span>
+      </div>
       <div id="settingsClose">按 ESC 或 Tab 关闭</div>
     </div>
   </div>
@@ -200,6 +205,6 @@
   <!-- 错误显示区域 -->
   <div id="errorOverlay" style="position:fixed;top:0;left:0;right:0;background:red;color:white;padding:15px;font-size:16px;z-index:99999;display:none;font-family:monospace;white-space:pre-wrap;max-height:50vh;overflow:auto;"></div>
   <!-- 游戏主模块 -->
-  <script type="module" src="/js/game.js?v=48"></script>
+  <script type="module" src="/js/game.js?v=49"></script>
 </body>
 </html>
