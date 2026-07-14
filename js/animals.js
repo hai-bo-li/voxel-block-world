@@ -381,7 +381,7 @@ class Robot {
     // 自动检测玩家
     const distToPlayer = this._getDistanceToPlayer();
     if (this.state === 'idle' || this.state === 'wander') {
-      if (distToPlayer < DETECTION_RANGE) {
+      if (distToPlayer < (this.detectRange || DETECTION_RANGE)) {
         this.state = 'chase';
         this.stateTimer = 8;
       }
@@ -402,16 +402,17 @@ class Robot {
   }
 
   _updateFlash(dt) {
-    if (this._hitFlashTimer > 0) {
-      this._hitFlashTimer -= dt;
-      if (this._hitFlashTimer <= 0) {
-        this.group.traverse(child => {
-          if (child.material && child.userData._origMat) {
-            child.material = child.userData._origMat;
-            child.userData._origMat = null;
+    if (this.hitFlashTimer > 0) {
+      this.hitFlashTimer -= dt;
+      this.group.traverse(child => {
+        if (child.isMesh && child.material && child.material.type === 'MeshLambertMaterial') {
+          if (this.hitFlashTimer > 0) {
+            child.material.emissive.setHex(0xFFFFFF);
+          } else {
+            child.material.emissive.setHex(0x000000);
           }
-        });
-      }
+        }
+      });
     }
   }
 
@@ -487,7 +488,7 @@ class Robot {
     const distToPlayer = this._getDistanceToPlayer();
 
     // 超出检测范围则放弃追击
-    if (distToPlayer > DETECTION_RANGE * 1.5) {
+    if (distToPlayer > (this.detectRange || DETECTION_RANGE) * 1.5) {
       this.state = 'wander';
       this.stateTimer = randRange(2, 4);
       this.wanderDir.set(
@@ -554,20 +555,26 @@ class Robot {
 
     if (this.attackType === 'melee') {
       const dist = this._getDistanceToPlayer();
-      if (dist < ATTACK_RANGE_MELEE) {
-        this.attackCooldown = ATTACK_COOLDOWN_MELEE;
-        // 对玩家造成伤害
-        if (this.targetPlayer.takeDamage) {
-          this.targetPlayer.takeDamage(this.attackDamage, this.position);
-        }
+      if (dist < (this.attackRange || ATTACK_RANGE_MELEE)) {
+        this.attackCooldown = this._baseAttackCooldown || ATTACK_COOLDOWN_MELEE;
+        // 调用子类可覆盖的 _attack
+        this._attack(this.targetPlayer);
       }
     } else if (this.attackType === 'ranged') {
       const dist = this._getDistanceToPlayer();
-      if (dist < ATTACK_RANGE_RANGED) {
-        this.attackCooldown = ATTACK_COOLDOWN_RANGED;
+      if (dist < (this.attackRange || ATTACK_RANGE_RANGED)) {
+        this.attackCooldown = this._baseAttackCooldown || ATTACK_COOLDOWN_RANGED;
         // 发射远程子弹
         this._fireProjectile();
       }
+    }
+  }
+
+  /** 子类攻击入口（FlyerBot/BruteBot/SpiderBot 使用自身属性） */
+  _attack(p) {
+    if (!p) return;
+    if (p.takeDamage) {
+      p.takeDamage(this.attackDamage, this.position);
     }
   }
 
@@ -926,6 +933,14 @@ export class FlyerBot extends Robot {
     this.hoverHeight = 5 + Math.random() * 3; // 5-8格高
     this.divePhase = false;
     this.diveTimer = 0;
+    this.attackTimer = 0;
+    this._buildModel();
+    this._updateHealthBar();
+  }
+
+  _buildModel() {
+    const g = this._buildBody();
+    this.group.add(g);
   }
 
   _buildBody() {
@@ -1003,11 +1018,11 @@ export class FlyerBot extends Robot {
 
       const nx = dx / (dist + 0.01);
       const nz = dz / (dist + 0.01);
-      this.group.position.x += nx * this.speed * dt;
-      this.group.position.z += nz * this.speed * dt;
+      this.position.x += nx * this.speed * dt;
+      this.position.z += nz * this.speed * dt;
       // 平滑Y轴移动
-      const yDiff = targetY - this.group.position.y;
-      this.group.position.y += yDiff * (this.divePhase ? 6 : 2) * dt;
+      const yDiff = targetY - this.position.y;
+      this.position.y += yDiff * (this.divePhase ? 6 : 2) * dt;
 
       // 攻击
       if (dist < this.attackRange) {
@@ -1020,8 +1035,11 @@ export class FlyerBot extends Robot {
     } else {
       this.state = 'idle';
       // 悬停晃动
-      this.group.position.y += Math.sin(performance.now() * 0.002) * 0.02;
+      this.position.y += Math.sin(performance.now() * 0.002) * 0.02;
     }
+
+    // 同步 group 位置
+    this.group.position.set(this.position.x, this.position.y, this.position.z);
 
     if (this.attackTimer > 0) this.attackTimer -= dt;
     this._updateHealthBar();
@@ -1040,11 +1058,22 @@ export class BruteBot extends Robot {
     this.maxHP = 120;
     this.hp = 120;
     this.speed = 2.0;
+    this.wanderSpeed = 1.2;
+    this.turnSpeed = 1.8;
     this.attackDamage = 12;
     this.attackRange = 2.8;
+    this._baseAttackCooldown = 1.8;
     this.detectRange = 20;
     this.attackCooldown = 1.8;
+    this.attackTimer = 0;
     this.height = 1.6;
+    this._buildModel();
+    this._updateHealthBar();
+  }
+
+  _buildModel() {
+    const g = this._buildBody();
+    this.group.add(g);
   }
 
   _buildBody() {
@@ -1137,12 +1166,23 @@ export class SpiderBot extends Robot {
     this.maxHP = 15;
     this.hp = 15;
     this.speed = 7.0;
+    this.wanderSpeed = 3.5;
+    this.turnSpeed = 5.0;
     this.attackDamage = 3;
     this.attackRange = 1.5;
+    this._baseAttackCooldown = 0.8;
     this.detectRange = 22;
     this.attackCooldown = 0.8;
+    this.attackTimer = 0;
     this.height = 0.5;
     this._legPhase = 0;
+    this._buildModel();
+    this._updateHealthBar();
+  }
+
+  _buildModel() {
+    const g = this._buildBody();
+    this.group.add(g);
   }
 
   _buildBody() {
@@ -1308,7 +1348,7 @@ export class AnimalManager {
       this.totalKills++;
       this._respawnQueue.push({
         timer: this.respawnDelay,
-        type: dead instanceof HeavyBot ? 'heavy' : 'scout',
+        type: dead.robotType || 'scout',
       });
     }
     this.robots = this.robots.filter(r => r.alive);
