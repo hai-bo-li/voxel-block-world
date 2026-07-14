@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=62';
-import { AnimalManager } from './animals.js?v=62';
+} from './voxel.js?v=63';
+import { AnimalManager } from './animals.js?v=63';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=62';
-import { audio } from './audio.js?v=62';
+} from './weapons.js?v=63';
+import { audio } from './audio.js?v=63';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1946,6 +1946,19 @@ class Game {
           panel.style.display = 'flex';
         }
       }
+
+      // V键切换任务列表面板
+      if (e.code === 'KeyV' && this.isRunning && !this.isMobile) {
+        const questPanel = document.getElementById('questPanel');
+        if (questPanel) {
+          if (questPanel.style.display === 'block') {
+            questPanel.style.display = 'none';
+          } else {
+            questPanel.style.display = 'block';
+            this._updateQuestPanel();
+          }
+        }
+      }
     });
 
     document.addEventListener('keyup', (e) => {
@@ -2144,9 +2157,7 @@ class Game {
     if (this._ammoEl) {
       this._ammoEl.style.display = show ? 'block' : 'none';
     }
-    // 任务面板
-    const questPanel = document.getElementById('questPanel');
-    if (questPanel) questPanel.style.display = show ? 'block' : 'none';
+    // 任务面板默认隐藏，按V键切换
   }
 
   _onResize() {
