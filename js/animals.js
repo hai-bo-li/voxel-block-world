@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=51';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=51';
-import { audio } from './audio.js?v=51';
+import { BlockType, isSolid } from './voxel.js?v=52';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=52';
+import { audio } from './audio.js?v=52';
 
 /* ============================================
    常量配置
@@ -399,6 +399,40 @@ class Robot {
 
     this._animateAntenna(dt);
     this._faceHealthBarToCamera();
+  }
+
+  _updateFlash(dt) {
+    if (this._hitFlashTimer > 0) {
+      this._hitFlashTimer -= dt;
+      if (this._hitFlashTimer <= 0) {
+        this.group.traverse(child => {
+          if (child.material && child.userData._origMat) {
+            child.material = child.userData._origMat;
+            child.userData._origMat = null;
+          }
+        });
+      }
+    }
+  }
+
+  _updateDeathParticles(dt) {
+    if (this._deathParticles && this._deathParticles.length > 0) {
+      for (let i = this._deathParticles.length - 1; i >= 0; i--) {
+        const p = this._deathParticles[i];
+        p._vel.y -= 20 * dt;
+        p.position.x += p._vel.x * dt;
+        p.position.y += p._vel.y * dt;
+        p.position.z += p._vel.z * dt;
+        p._life -= dt;
+        p.material.opacity = Math.max(0, p._life);
+        if (p._life <= 0) {
+          this.scene.remove(p);
+          p.geometry.dispose();
+          p.material.dispose();
+          this._deathParticles.splice(i, 1);
+        }
+      }
+    }
   }
 
   _animateAntenna(dt) {}
