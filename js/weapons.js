@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=25';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=26';
 
 /* ============================================
    武器类型定义
@@ -390,6 +390,7 @@ export class WeaponRenderer {
     this.reloadAnim = 0;       // 0~1 换弹动画进度
     this.isReloading = false;
     this.scopeActive = false;  // 狙击枪瞄准镜状态
+    this.placePhase = 0;       // 放置方块动画 0~1
   }
 
   /** 切换武器 */
@@ -576,6 +577,11 @@ export class WeaponRenderer {
     this.swingStartTime = performance.now();
   }
 
+  /** 触发放置动画(轻挥) */
+  triggerPlace() {
+    this.placePhase = 1.0;
+  }
+
   /** 触发后坐力动画 */
   triggerRecoil() {
     this.recoilPhase = 1.0;
@@ -597,6 +603,11 @@ export class WeaponRenderer {
 
     if (this.recoilPhase > 0) {
       this.recoilPhase = Math.max(0, this.recoilPhase - dt * 8);
+    }
+
+    // 放置方块动画衰减
+    if (this.placePhase > 0) {
+      this.placePhase = Math.max(0, this.placePhase - dt * 6);
     }
 
     // 换弹动画进度递减
@@ -623,7 +634,17 @@ export class WeaponRenderer {
       swingRotZ = 0;
     }
 
-    const recoilZ = this.recoilPhase * 0.08;
+    const recoilAmount = WeaponDefs[this.currentWeapon]?.recoil || 0.05;
+    const recoilZ = this.recoilPhase * recoilAmount;
+
+    // 放置方块动画：向前伸出 → 归位
+    let placeOffsetZ = 0;
+    let placeRotX = 0;
+    if (this.placePhase > 0) {
+      const t = 1 - this.placePhase;
+      placeOffsetZ = Math.sin(t * Math.PI) * 0.15;
+      placeRotX = -Math.sin(t * Math.PI) * 0.3;
+    }
 
     // 换弹动画：武器下沉 → 弹匣弹出 → 装填 → 归位
     let reloadOffsetY = 0;
@@ -658,10 +679,10 @@ export class WeaponRenderer {
     this.weaponGroup.position.set(
       bobX * scopeFactor,
       bobY * scopeFactor + reloadOffsetY - recoilZ * 0.3,
-      -recoilZ + reloadOffsetZ
+      -recoilZ + reloadOffsetZ + placeOffsetZ
     );
     this.weaponGroup.rotation.set(
-      -swingAngle * 0.5 + reloadRotX,
+      -swingAngle * 0.5 + reloadRotX + placeRotX,
       0,
       swingRotZ || -swingAngle * 0.3
     );
@@ -760,6 +781,9 @@ export class WeaponManager {
     // 消耗弹药
     this.currentAmmo[weaponType] = ammo - 1;
     this.onAmmoChanged?.();
+
+    // 视觉后坐力回调（相机抖动）
+    this.onShootRecoil?.(def.recoil || 0.05);
 
     // 霰弹枪散射
     const pellets = def.pellets || 1;

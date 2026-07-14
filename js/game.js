@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=25';
-import { AnimalManager } from './animals.js?v=25';
+} from './voxel.js?v=26';
+import { AnimalManager } from './animals.js?v=26';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=25';
-import { audio } from './audio.js?v=25';
+} from './weapons.js?v=26';
+import { audio } from './audio.js?v=26';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -683,6 +683,7 @@ class TouchController {
         e.preventDefault();
         e.stopPropagation();
         const ok = this.player.placeBlock();
+        this.weaponManager.triggerPlace();
         _flashBtn(btnPlace, !ok);
         if (!ok) _haptic(10);
       });
@@ -1000,6 +1001,12 @@ class Game {
         if (q.type === 'kill_scout' && animal.robotType === 'scout') { q.progress++; if (q.progress >= q.target) { q.done = true; this._onQuestComplete(q); } }
         if (q.type === 'kill_heavy' && animal.robotType === 'heavy') { q.progress++; if (q.progress >= q.target) { q.done = true; this._onQuestComplete(q); } }
       }
+    };
+
+    // 射击后坐力（相机抖动）
+    this.weaponManager.onShootRecoil = (recoilAmount) => {
+      this.player.pitch += recoilAmount * 0.3;
+      this.player.yaw += (Math.random() - 0.5) * recoilAmount * 0.15;
     };
   }
 
@@ -1480,7 +1487,7 @@ class Game {
   /** 任务完成回调 */
   _onQuestComplete(quest) {
     if (audio) audio.quest();
-    this._addKillFeed(`✦ 任务完成: ${quest.name}`, '#ffd700');
+    this._showKillFeed(`✦ 任务完成: ${quest.name}`, '#ffd700');
 
     // 任务奖励
     switch (quest.id) {
@@ -1798,6 +1805,7 @@ class Game {
           this._weaponAttack();
         } else {
           this.player.placeBlock();
+          this.weaponManager.triggerPlace();
         }
       } else if (e.button === 2) {
         if (currentItem && currentItem.type === 'weapon') {
