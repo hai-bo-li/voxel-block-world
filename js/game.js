@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=72';
-import { AnimalManager } from './animals.js?v=72';
+} from './voxel.js?v=73';
+import { AnimalManager } from './animals.js?v=73';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=72';
-import { audio } from './audio.js?v=72';
+} from './weapons.js?v=73';
+import { audio } from './audio.js?v=73';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -192,8 +192,9 @@ class Player {
       moveDir.normalize();
     }
 
-    this.velocity.x = moveDir.x * this.moveSpeed;
-    this.velocity.z = moveDir.z * this.moveSpeed;
+    const speedMult = this.keys['ShiftLeft'] || this.keys['ShiftRight'] ? 1.3 : 1.0;
+    this.velocity.x = moveDir.x * this.moveSpeed * speedMult;
+    this.velocity.z = moveDir.z * this.moveSpeed * speedMult;
 
     // 水物理检测
     const footBlock = this.world.getBlock(
