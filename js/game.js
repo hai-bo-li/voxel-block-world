@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=51';
-import { AnimalManager } from './animals.js?v=51';
+} from './voxel.js?v=48';
+import { AnimalManager } from './animals.js?v=48';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=51';
-import { audio } from './audio.js?v=51';
+} from './weapons.js?v=48';
+import { audio } from './audio.js?v=48';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -783,8 +783,6 @@ class Game {
     this.isAiming = false;
     this.scopeLevel = 0; // 0=off, 1=1.5x, 2=3x
     this._rightMouseDown = false;
-    this.isSettingsOpen = false;
-    this.aimSensitivity = 0.5; // 瞄准时灵敏度倍率(0-1)
     this.baseFOV = 75;
     this._pointerLockExitTime = 0; // 记录上次退出指针锁定的时间
 
@@ -799,7 +797,6 @@ class Game {
 
     // 设置参数（灵敏度、晃动、平滑度）
     this.mouseSensitivity = 0.002;
-    this.aimSensitivity = 0.5;
     this.bobIntensity = 1.0;
     this.moveSmoothing = 0.85;
 
@@ -1874,13 +1871,6 @@ class Game {
         return;
       }
 
-      if (this.isSettingsOpen) {
-        if (e.code === 'Escape' || e.code === 'Tab') {
-          this._toggleSettings();
-        }
-        return;
-      }
-
       this.player.keys[e.code] = true;
 
       if (e.code >= 'Digit1' && e.code <= 'Digit9') {
@@ -1948,8 +1938,7 @@ class Game {
 
     document.addEventListener('mousemove', (e) => {
       if (!this.isPointerLocked) return;
-      const mult = this.isAiming ? this.aimSensitivity : 1.0;
-      this.player.onMouseMove(e.movementX * this.mouseSensitivity * mult, e.movementY * this.mouseSensitivity * mult);
+      this.player.onMouseMove(e.movementX * this.mouseSensitivity / 0.0015, e.movementY * this.mouseSensitivity / 0.0015);
     });
 
     document.addEventListener('mousedown', (e) => {
@@ -2027,7 +2016,8 @@ class Game {
           this.isInventoryOpen = false;
           if (this.inventoryUI) this.inventoryUI.close();
           this._showGameUI(true);
-        } else if (this.isRunning && !this.isInventoryOpen && !this._inventoryJustClosed && !this.isSettingsOpen) {
+        } else if (this.isRunning && !this.isInventoryOpen && !this._inventoryJustClosed) {
+          this._pointerLockExitTime = performance.now();
           this.ui.pauseScreen.style.display = 'flex';
           // 失去指针锁定时关闭瞄准镜
           if (this.targetFov !== this.fov) {
@@ -2042,7 +2032,9 @@ class Game {
       });
 
       const requestLock = () => {
-        if (!this.isPointerLocked && this.isRunning && !this.isInventoryOpen && !this.isSettingsOpen) {
+        if (!this.isPointerLocked && this.isRunning && !this.isInventoryOpen) {
+          const now = performance.now();
+          if (now - this._pointerLockExitTime < 800) return;
           try {
             const p = this.canvas.requestPointerLock();
             if (p && typeof p.catch === 'function') p.catch(() => {});
@@ -2251,16 +2243,10 @@ class Game {
 
     if (panel.style.display === 'none') {
       panel.style.display = 'flex';
-      this.isSettingsOpen = true;
       try { document.exitPointerLock(); } catch(_) {}
     } else {
       panel.style.display = 'none';
-      this.isSettingsOpen = false;
-      if (!this.isMobile) {
-        setTimeout(() => {
-          try { this.canvas.requestPointerLock(); } catch(_) {}
-        }, 200);
-      }
+      if (!this.isMobile) try { this.canvas.requestPointerLock(); } catch(_) {}
     }
   }
 
@@ -2295,19 +2281,6 @@ class Game {
         const v = parseInt(sensSlider.value);
         this.mouseSensitivity = v / 2500;
         if (sensVal) sensVal.textContent = v;
-      });
-    }
-
-    const aimSensSlider = document.getElementById('settingAimSens');
-    const aimSensVal = document.getElementById('settingAimSensVal');
-
-    if (aimSensSlider) {
-      aimSensSlider.value = Math.round(this.aimSensitivity * 5000);
-      if (aimSensVal) aimSensVal.textContent = aimSensSlider.value;
-      aimSensSlider.addEventListener('input', () => {
-        const v = parseInt(aimSensSlider.value);
-        this.aimSensitivity = v / 5000;
-        if (aimSensVal) aimSensVal.textContent = v;
       });
     }
 
