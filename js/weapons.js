@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=40';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=41';
 
 /* ============================================
    武器类型定义
@@ -543,83 +543,95 @@ class Grenade {
   }
 
   _spawnExplosionParticles(pos) {
-    // 闪光球
-    const flashGeo = new THREE.SphereGeometry(0.8, 8, 8);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0xFFFF00, transparent: true, opacity: 1 });
+    // 大闪光球
+    const flashGeo = new THREE.SphereGeometry(2.5, 12, 12);
+    const flashMat = new THREE.MeshBasicMaterial({ color: 0xFFEE44, transparent: true, opacity: 1 });
     const flash = new THREE.Mesh(flashGeo, flashMat);
     flash.position.copy(pos);
     flash._vel = new THREE.Vector3(0, 0, 0);
-    flash._life = 0.15;
+    flash._life = 0.25;
     flash._isFlash = true;
     this.scene.add(flash);
     if (!this.scene._particles) this.scene._particles = [];
     this.scene._particles.push(flash);
 
-    // 火焰粒子
-    const fireCount = 15;
+    // 第二层闪光
+    const flash2Geo = new THREE.SphereGeometry(1.5, 8, 8);
+    const flash2Mat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 1 });
+    const flash2 = new THREE.Mesh(flash2Geo, flash2Mat);
+    flash2.position.copy(pos);
+    flash2._vel = new THREE.Vector3(0, 0, 0);
+    flash2._life = 0.12;
+    flash2._isFlash = true;
+    this.scene.add(flash2);
+    this.scene._particles.push(flash2);
+
+    // 火焰粒子 - 大量+大范围
+    const fireCount = 35;
     for (let i = 0; i < fireCount; i++) {
-      const color = Math.random() > 0.5 ? 0xFF6D00 : 0xFFAB00;
-      const size = 0.06 + Math.random() * 0.08;
+      const colors = [0xFF6D00, 0xFFAB00, 0xFF3300, 0xFFEE00];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const size = 0.1 + Math.random() * 0.15;
       const geo = new THREE.BoxGeometry(size, size, size);
       const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
       const particle = new THREE.Mesh(geo, mat);
       particle.position.copy(pos);
 
-      const speed = 6;
+      const speed = 14;
       const vel = new THREE.Vector3(
         (Math.random() - 0.5) * speed,
-        Math.random() * speed * 0.6 + 2,
+        Math.random() * speed * 0.8 + 4,
         (Math.random() - 0.5) * speed
       );
       particle._vel = vel;
-      particle._life = 0.3 + Math.random() * 0.5;
+      particle._life = 0.4 + Math.random() * 0.8;
+      particle._gravity = true;
 
       this.scene.add(particle);
-      if (!this.scene._particles) this.scene._particles = [];
       this.scene._particles.push(particle);
     }
-    // 灰色碎石粒子
-    const debrisCount = 20;
+    // 灰色碎石粒子 - 大量+超大范围
+    const debrisCount = 40;
     for (let i = 0; i < debrisCount; i++) {
-      const grayTone = 0x444444 + Math.floor(Math.random() * 0x444444);
-      const size = 0.05 + Math.random() * 0.1;
+      const grayTone = 0x333333 + Math.floor(Math.random() * 0x666666);
+      const size = 0.08 + Math.random() * 0.18;
       const geo = new THREE.BoxGeometry(size, size, size);
       const mat = new THREE.MeshBasicMaterial({ color: grayTone, transparent: true, opacity: 1 });
+      const particle = new THREE.Mesh(geo, mat);
+      particle.position.copy(pos);
+
+      const speed = 18;
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * speed,
+        Math.random() * speed * 0.9 + 5,
+        (Math.random() - 0.5) * speed
+      );
+      particle._vel = vel;
+      particle._life = 0.5 + Math.random() * 1.2;
+      particle._gravity = true;
+      this.scene.add(particle);
+      this.scene._particles.push(particle);
+    }
+    // 烟雾粒子 - 大量+大范围+慢速扩散
+    const smokeCount = 25;
+    for (let i = 0; i < smokeCount; i++) {
+      const size = 0.15 + Math.random() * 0.3;
+      const geo = new THREE.BoxGeometry(size, size, size);
+      const grayVal = Math.floor(0x44 + Math.random() * 0x44);
+      const mat = new THREE.MeshBasicMaterial({ color: (grayVal << 16) | (grayVal << 8) | grayVal, transparent: true, opacity: 0.8 });
       const particle = new THREE.Mesh(geo, mat);
       particle.position.copy(pos);
 
       const speed = 8;
       const vel = new THREE.Vector3(
         (Math.random() - 0.5) * speed,
-        Math.random() * speed * 0.7 + 3,
+        Math.random() * speed * 0.6 + 3,
         (Math.random() - 0.5) * speed
       );
       particle._vel = vel;
-      particle._life = 0.4 + Math.random() * 0.8;
-      this.scene.add(particle);
-      if (!this.scene._particles) this.scene._particles = [];
-      this.scene._particles.push(particle);
-    }
-    // 烟雾粒子
-    const smokeCount = 12;
-    for (let i = 0; i < smokeCount; i++) {
-      const size = 0.08 + Math.random() * 0.12;
-      const geo = new THREE.BoxGeometry(size, size, size);
-      const mat = new THREE.MeshBasicMaterial({ color: 0x666666, transparent: true, opacity: 0.7 });
-      const particle = new THREE.Mesh(geo, mat);
-      particle.position.copy(pos);
-
-      const speed = 4;
-      const vel = new THREE.Vector3(
-        (Math.random() - 0.5) * speed,
-        Math.random() * speed * 0.5 + 2,
-        (Math.random() - 0.5) * speed
-      );
-      particle._vel = vel;
-      particle._life = 0.6 + Math.random() * 1.0;
+      particle._life = 1.0 + Math.random() * 1.5;
 
       this.scene.add(particle);
-      if (!this.scene._particles) this.scene._particles = [];
       this.scene._particles.push(particle);
     }
   }
@@ -1450,7 +1462,7 @@ export class WeaponManager {
         p._vel.y -= 15 * dt;
         if (p._isFlash) {
           // 闪光球：缩小并消失
-          const s = Math.max(0.01, p._life / 0.15);
+          const s = Math.max(0.01, p._life / 0.25);
           p.scale.set(s, s, s);
           p.material.opacity = s;
         } else {
