@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=61';
-import { AnimalManager } from './animals.js?v=61';
+} from './voxel.js?v=62';
+import { AnimalManager } from './animals.js?v=62';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=61';
-import { audio } from './audio.js?v=61';
+} from './weapons.js?v=62';
+import { audio } from './audio.js?v=62';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1936,6 +1936,16 @@ class Game {
         e.preventDefault();
         this._toggleSettings();
       }
+
+      // P键切换操作说明面板
+      if (e.code === 'KeyP' && this.isRunning && !this.isMobile) {
+        const panel = this.ui.controlsPanel;
+        if (panel.style.display === 'flex') {
+          panel.style.display = 'none';
+        } else {
+          panel.style.display = 'flex';
+        }
+      }
     });
 
     document.addEventListener('keyup', (e) => {
@@ -2117,8 +2127,9 @@ class Game {
     this.ui.debugInfo.style.display = show ? 'block' : 'none';
     this.ui.blockHighlight.style.display = 'none';
 
+    // 操作说明面板：默认隐藏，按P键切换
     if (!this.isMobile) {
-      this.ui.controlsPanel.style.display = show ? 'flex' : 'none';
+      if (!show) this.ui.controlsPanel.style.display = 'none';
     }
 
     if (this.isMobile) {
