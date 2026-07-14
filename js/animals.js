@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=57';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=57';
-import { audio } from './audio.js?v=57';
+import { BlockType, isSolid } from './voxel.js?v=58';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=58';
+import { audio } from './audio.js?v=58';
 
 /* ============================================
    常量配置
@@ -183,12 +183,23 @@ class Robot {
     // 受击闪烁效果
     this.hitFlashTimer = 0.15;
 
-    // 击退（包含向上的分量）
+    // 击退（水平为主，仅爆炸才有显著向上分量）
     if (source && source.position) {
       const strength = isExplosion ? 12 : KNOCKBACK_STRENGTH;
       const kb = computeKnockback(this.position, source.position, strength);
       this.knockbackVel.copy(kb);
-      this.verticalVel = isExplosion ? 10 : 5; // 爆炸击飞更高
+      // 地面怪物：普通子弹只有轻微上抬（1.5），爆炸才大幅击飞（10）
+      // 飞行怪物：不受垂直击退影响，避免越打越高
+      if (this.robotType === 'flyer') {
+        // 飞行怪保持当前高度，仅水平击退
+      } else if (isExplosion) {
+        this.verticalVel = 10;
+      } else {
+        // 地面怪轻微上抬，且仅在着地时才生效（避免空中连击叠加）
+        if (this.verticalVel >= 0 && this.position.y <= (this._getGroundY(this.position.x, this.position.z) + 0.15)) {
+          this.verticalVel = 1.5;
+        }
+      }
     }
 
     // 受击粒子
