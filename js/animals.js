@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=68';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=68';
-import { audio } from './audio.js?v=68';
+import { BlockType, isSolid } from './voxel.js?v=69';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=69';
+import { audio } from './audio.js?v=69';
 
 /* ============================================
    常量配置
@@ -32,8 +32,8 @@ const ATTACK_RANGE_RANGED = 20;    // 远程攻击距离
 const CHASE_SPEED_MULT = 1.3;      // 追击速度倍率（降低）
 // 模型默认朝 +Z；Three.js Y 旋转 θ 使 +Z 朝向 (sinθ, cosθ)
 // 因此朝向 (dx,dz) 的旋转角 = atan2(dx, dz)（dx 在前, dz 在后）
-const ATTACK_COOLDOWN_MELEE = 1.2; // 近战冷却
-const ATTACK_COOLDOWN_RANGED = 2.0;// 远程冷却
+const ATTACK_COOLDOWN_MELEE = 2.4; // 近战冷却（降低攻击频率）
+const ATTACK_COOLDOWN_RANGED = 4.0;// 远程冷却（降低攻击频率）
 const DAMAGE_MELEE_SCOUT = 3;      // 侦察机器人近战伤害
 const DAMAGE_MELEE_HEAVY = 8;      // 重型机器人近战伤害
 const DAMAGE_RANGED_HEAVY = 5;     // 重型机器人远程伤害
@@ -956,7 +956,7 @@ export class FlyerBot extends Robot {
     this.attackDamage = 4;
     this.attackRange = 18;        // 远程射击距离
     this.detectRange = 28;
-    this.attackCooldown = 1.2;    // 射击冷却
+    this.attackCooldown = 2.4;    // 射击冷却（降低攻击频率）
     this.hoverHeight = 5 + Math.random() * 3; // 5-8格高
     this.attackTimer = 0;
     this.collisionWidth = 0.8;
@@ -1103,9 +1103,9 @@ export class BruteBot extends Robot {
     this.turnSpeed = 1.3;
     this.attackDamage = 12;
     this.attackRange = 2.8;
-    this._baseAttackCooldown = 1.8;
+    this._baseAttackCooldown = 3.6;
     this.detectRange = 20;
-    this.attackCooldown = 1.8;
+    this.attackCooldown = 3.6;
     this.attackTimer = 0;
     this.height = 1.6;
     this.collisionWidth = 1.1;
@@ -1215,9 +1215,9 @@ export class SpiderBot extends Robot {
     this.turnSpeed = 3.5;
     this.attackDamage = 3;
     this.attackRange = 1.5;
-    this._baseAttackCooldown = 0.8;
+    this._baseAttackCooldown = 1.6;
     this.detectRange = 22;
-    this.attackCooldown = 0.8;
+    this.attackCooldown = 1.6;
     this.attackTimer = 0;
     this.height = 0.5;
     this.collisionWidth = 0.9;
