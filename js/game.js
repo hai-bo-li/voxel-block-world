@@ -893,14 +893,14 @@ class Game {
     this.animalManager.spawnAnimals();
     this.animalManager.setPlayer(this.player);
 
-    // 延迟3秒后生成文字立墙（避免启动时卡顿）
+    // 延迟1秒后生成文字立墙（避免启动时卡顿）
     this._textLoaded = false;
     setTimeout(() => {
       if (this.world && !this._textLoaded) {
         this.world.enableText();
         this._textLoaded = true;
       }
-    }, 3000);
+    }, 1000);
   }
 
   _createChunk(cx, cz) {
@@ -1018,15 +1018,18 @@ class Game {
       this.player.pitch += recoilAmount * 0.3;
       this.player.yaw += (Math.random() - 0.5) * recoilAmount * 0.15;
 
-      // 物理后坐力：推动玩家后退
+      // 物理后坐力：推动玩家后退（直接位移+knockbackVel）
       const wType = this.weaponManager.currentWeapon;
       const wDef = WeaponDefs[wType];
       if (wDef && wDef.pushback) {
         const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.camera.quaternion);
-        this.player.velocity.x -= dir.x * wDef.pushback * 3;
-        this.player.velocity.z -= dir.z * wDef.pushback * 3;
-        // 轻微上仰
-        this.player.velocity.y += wDef.pushback * 0.8;
+        // 直接位移（立即反馈）
+        this.player.position.x -= dir.x * wDef.pushback * 0.15;
+        this.player.position.z -= dir.z * wDef.pushback * 0.15;
+        // 叠加持续后退速度
+        this.player.knockbackVel.x -= dir.x * wDef.pushback * 5;
+        this.player.knockbackVel.z -= dir.z * wDef.pushback * 5;
+        this.player.knockbackVel.y += wDef.pushback * 1.5;
       }
     };
   }
@@ -1419,12 +1422,13 @@ class Game {
 
     this.tutorialOverlayTimer += dt;
 
+    // 缩短教程时间，5秒内全部显示完毕
     const steps = [
-      { time: 2, text: 'WASD 移动 | 鼠标控制视角' },
-      { time: 5, text: '左键攻击 | 右键瞄准/破坏方块' },
-      { time: 9, text: '滚轮/数字键 切换武器 | Q 快速切换' },
-      { time: 13, text: 'R 换弹 | E 打开背包' },
-      { time: 17, text: '消灭机器人，生存下去！' },
+      { time: 0.5, text: 'WASD 移动 | 鼠标控制视角' },
+      { time: 1.5, text: '左键攻击 | 右键瞄准/破坏方块' },
+      { time: 2.5, text: '滚轮/数字键 切换武器 | Q 快速切换' },
+      { time: 3.5, text: 'R 换弹 | E/B 打开背包' },
+      { time: 4.5, text: '消灭机器人，生存下去！' },
     ];
 
     const currentStep = steps.findIndex((s, i) => {
@@ -1439,12 +1443,20 @@ class Game {
       tutorialOverlay.style.display = 'block';
     }
 
-    if (this.tutorialOverlayTimer > 22) {
-      tutorialOverlay.style.opacity = '0';
-      this.tutorialOverlayShown = true;
-      setTimeout(() => {
-        tutorialOverlay.style.display = 'none';
-      }, 500);
+    // 6秒后隐藏教程
+    if (this.tutorialOverlayTimer > 6) {
+      this._hideTutorial(tutorialOverlay);
+    }
+  }
+
+  /** 隐藏教程 */
+  _hideTutorial(overlay) {
+    if (this.tutorialOverlayShown) return;
+    this.tutorialOverlayShown = true;
+    const el = overlay || document.getElementById('tutorialOverlay');
+    if (el) {
+      el.style.opacity = '0';
+      setTimeout(() => { el.style.display = 'none'; }, 300);
     }
   }
 
@@ -1738,6 +1750,11 @@ class Game {
   /** 绑定事件监听 */
   _initEvents() {
     document.addEventListener('keydown', (e) => {
+      // 按任意键跳过教程
+      if (!this.tutorialOverlayShown && this.isRunning) {
+        this._hideTutorial();
+      }
+
       if (this.isInventoryOpen) {
         if (e.code === 'KeyE' || e.code === 'Escape') {
           this.inventoryUI.close();
@@ -1760,7 +1777,7 @@ class Game {
         }
       }
 
-      if (e.code === 'KeyE' && this.isRunning && !this.isMobile) {
+      if ((e.code === 'KeyE' || e.code === 'KeyB') && this.isRunning && !this.isMobile) {
         this.isInventoryOpen = true;
         document.exitPointerLock();
         this.inventoryUI.open();

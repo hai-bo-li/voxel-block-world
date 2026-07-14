@@ -81,12 +81,12 @@ export const WeaponDefs = {
     type: 'ranged',
     damage: 3,
     range: 40,
-    cooldown: 0.08,
+    cooldown: 0.1,
     blockDamage: 1,
-    bulletSpeed: 90,
+    bulletSpeed: 100,
     bulletColor: 0x76FF03,
-    bulletSize: 0.06,
-    recoil: 0.008,
+    bulletSize: 0.04,
+    recoil: 0.005,
     magSize: 40,
     reloadTime: 1.8,
     ammoType: 'smg',
@@ -198,13 +198,14 @@ class Bullet {
       origin.z + direction.z
     );
 
-    // 发光效果
+    // 发光效果（自动武器缩小发光以避免视觉混乱）
+    const glowScale = weaponDef.auto ? 1.5 : 2.5;
     const glowMat = new THREE.MeshBasicMaterial({
       color: weaponDef.bulletColor,
       transparent: true,
-      opacity: 0.3,
+      opacity: weaponDef.auto ? 0.2 : 0.3,
     });
-    const glowGeo = new THREE.BoxGeometry(size * 2.5, size * 2.5, size * 4);
+    const glowGeo = new THREE.BoxGeometry(size * glowScale, size * glowScale, size * (glowScale + 1));
     this.glow = new THREE.Mesh(glowGeo, glowMat);
     this.mesh.add(this.glow);
 
@@ -281,7 +282,8 @@ class Bullet {
 
   _spawnHitParticles(x, y, z, blockType) {
     const color = _getBlockParticleColor(blockType);
-    for (let i = 0; i < 4; i++) {
+    const count = this.weaponDef?.auto ? 2 : 4;
+    for (let i = 0; i < count; i++) {
       const size = 0.08 + Math.random() * 0.06;
       const geo = new THREE.BoxGeometry(size, size, size);
       const mat = new THREE.MeshBasicMaterial({ color });
@@ -327,6 +329,11 @@ class Bullet {
 
   destroy() {
     this.alive = false;
+    // 清理发光子网格
+    if (this.glow) {
+      if (this.glow.geometry) this.glow.geometry.dispose();
+      if (this.glow.material) this.glow.material.dispose();
+    }
     this.scene.remove(this.mesh);
     if (this.mesh.geometry) this.mesh.geometry.dispose();
     if (this.mesh.material) this.mesh.material.dispose();
@@ -592,6 +599,11 @@ export class WeaponRenderer {
   /** 触发后坐力动画 */
   triggerRecoil() {
     this.recoilPhase = 1.0;
+  }
+
+  /** 设置瞄准镜状态 */
+  setScopeActive(active) {
+    this.scopeActive = active;
   }
 
   /** 每帧更新武器动画 */
