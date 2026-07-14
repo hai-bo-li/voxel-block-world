@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=70';
-import { AnimalManager } from './animals.js?v=70';
+} from './voxel.js?v=71';
+import { AnimalManager } from './animals.js?v=71';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=70';
-import { audio } from './audio.js?v=70';
+} from './weapons.js?v=71';
+import { audio } from './audio.js?v=71';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -928,6 +928,113 @@ class Game {
         this._textLoaded = true;
       }
     }, 1000);
+  }
+
+  /** 重置世界 — 每次进入游戏时重新初始化 */
+  async _resetWorld() {
+    // 1. 清除所有区块网格
+    for (const chunk of this.world.chunks.values()) {
+      if (chunk.mesh) { this.scene.remove(chunk.mesh); chunk.mesh.geometry.dispose(); }
+      if (chunk.waterMesh) { this.scene.remove(chunk.waterMesh); chunk.waterMesh.geometry.dispose(); }
+    }
+    this.world.chunks.clear();
+
+    // 2. 清除所有敌人子弹和粒子
+    this.scene._enemyBullets.length = 0;
+    for (const p of this.scene._particles) {
+      if (p.mesh) this.scene.remove(p.mesh);
+    }
+    this.scene._particles.length = 0;
+
+    // 3. 清除所有怪物
+    this.animalManager.robots.forEach(r => {
+      if (r.group) this.scene.remove(r.group);
+      if (r.bullets) r.bullets.forEach(b => { if (b.mesh) this.scene.remove(b.mesh); });
+    });
+    this.animalManager.robots = [];
+    this.animalManager._respawnQueue = [];
+
+    // 4. 清除所有子弹（玩家武器）
+    this.weaponManager.bullets.forEach(b => { if (b.mesh) this.scene.remove(b.mesh); });
+    this.weaponManager.bullets = [];
+    if (this.weaponManager.grenades) {
+      this.weaponManager.grenades.forEach(g => { if (g.mesh) this.scene.remove(g.mesh); });
+      this.weaponManager.grenades = [];
+    }
+
+    // 5. 重置玩家
+    this.player.hp = this.player.maxHP;
+    this.player.alive = true;
+    this.player.velocity.set(0, 0, 0);
+    this.player.knockbackVel.set(0, 0, 0);
+    this.player.yaw = 0;
+    this.player.pitch = -0.3;
+    this.player.position.set(this._spawnX, this._spawnY, this._spawnZ);
+    this.player.onGround = false;
+    this._updateHealthBar(this.player.hp, this.player.maxHP);
+
+    // 6. 重置武器/弹药/背包
+    this.weaponManager.isReloading = false;
+    this.weaponManager.reloadTimer = 0;
+    this.weaponManager.currentWeapon = 0;
+    this.weaponManager.grenadeCount = Infinity;
+    this.weaponManager.grenadeThrowCooldown = 0;
+    for (const key in this.weaponManager.ammo) {
+      const def = WeaponDefs[key];
+      if (def && def.magSize) {
+        this.weaponManager.ammo[key] = { magazine: def.magSize, reserve: def.magSize * 3 };
+      }
+    }
+    this.inventory.reset();
+    this._updateHotbar();
+    this._updateAmmoHUD();
+
+    // 7. 重置任务
+    this._initQuests();
+    this.waveKills = 0;
+    this.totalKills = 0;
+    this._updateWaveInfo();
+
+    // 8. 重新生成初始区块
+    this.ui.loadingBar.style.display = 'block';
+    this.ui.loadingFill.style.width = '0%';
+    const startupRadius = 2;
+    const chunksToLoad = [];
+    for (let dx = -startupRadius; dx <= startupRadius; dx++) {
+      for (let dz = -startupRadius; dz <= startupRadius; dz++) {
+        if (dx * dx + dz * dz > startupRadius * startupRadius) continue;
+        chunksToLoad.push([dx, dz]);
+      }
+    }
+    chunksToLoad.sort((a, b) => (a[0]*a[0]+a[1]*a[1]) - (b[0]*b[0]+b[1]*b[1]));
+    const needed = chunksToLoad.length;
+    let generated = 0;
+    for (const [cx, cz] of chunksToLoad) {
+      const chunk = await this._createChunk(cx, cz);
+      if (chunk.mesh) this.scene.add(chunk.mesh);
+      if (chunk.waterMesh) this.scene.add(chunk.waterMesh);
+      generated++;
+      this.ui.loadingFill.style.width = `${(generated / needed * 100) | 0}%`;
+      if (generated % 2 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+    this.ui.loadingBar.style.display = 'none';
+
+    // 9. 重新生成怪物
+    this.animalManager.spawnAnimals();
+    this.animalManager.setPlayer(this.player);
+
+    // 10. 重新生成文字立墙
+    this._textLoaded = false;
+    this.world.textEnabled = false;
+    setTimeout(() => {
+      if (this.world && !this._textLoaded) {
+        this.world.enableText();
+        this._textLoaded = true;
+      }
+    }, 500);
+
+    // 11. 隐藏死亡界面
+    if (this._deathScreenEl) this._deathScreenEl.style.display = 'none';
   }
 
   _createChunk(cx, cz) {
@@ -2070,7 +2177,8 @@ class Game {
         }
       };
 
-      this.ui.startScreen.addEventListener('click', () => {
+      this.ui.startScreen.addEventListener('click', async () => {
+        await this._resetWorld();
         this.isRunning = true;
         this.ui.startScreen.style.display = 'none';
         this.camera.position.set(this._spawnX, this._spawnY + this.player.eyeHeight, this._spawnZ);
@@ -2092,7 +2200,8 @@ class Game {
     }
 
     if (this.isMobile) {
-      this.ui.startScreen.addEventListener('click', () => {
+      this.ui.startScreen.addEventListener('click', async () => {
+        await this._resetWorld();
         this.isRunning = true;
         this.ui.startScreen.style.display = 'none';
         this.camera.position.set(this._spawnX, this._spawnY + this.player.eyeHeight, this._spawnZ);

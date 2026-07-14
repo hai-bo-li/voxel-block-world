@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=70';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=71';
 
 /* ============================================
    武器类型定义
@@ -1581,7 +1581,16 @@ export class Inventory {
     this._initStarterItems();
   }
 
+  reset() {
+    this.slots.fill(null);
+    this.selectedSlot = 0;
+    this._initStarterItems();
+  }
+
   _initStarterItems() {
+    // 清空所有槽位
+    this.slots.fill(null);
+    this.selectedSlot = 0;
     // 快捷栏 0-5: 武器 (对应数字键 1-6)
     this.slots[0] = { type: 'weapon', weaponType: WeaponType.FIST, count: 1 };
     this.slots[1] = { type: 'weapon', weaponType: WeaponType.SWORD, count: 1 };
