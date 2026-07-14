@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=37';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=38';
 
 /* ============================================
    武器类型定义
@@ -444,23 +444,50 @@ class Grenade {
     scene.add(this.mesh);
   }
 
-  update(dt) {
+  update(dt, world) {
     if (!this.alive) return;
 
     // 重力
     this.velocity.y -= 20 * dt;
+
+    // 保存旧位置
+    const oldPos = this.mesh.position.clone();
 
     // 移动
     this.mesh.position.add(this.velocity.clone().multiplyScalar(dt));
     this.mesh.rotation.x += dt * 3;
     this.mesh.rotation.z += dt * 2;
 
-    // 地面弹跳
-    if (this.mesh.position.y < 0.12) {
-      this.mesh.position.y = 0.12;
-      this.velocity.y = Math.abs(this.velocity.y) * 0.3;
-      this.velocity.x *= 0.7;
-      this.velocity.z *= 0.7;
+    // 方块碰撞检测
+    const px = Math.floor(this.mesh.position.x);
+    const py = Math.floor(this.mesh.position.y);
+    const pz = Math.floor(this.mesh.position.z);
+
+    if (py >= 0 && py < CHUNK_HEIGHT && world) {
+      const block = world.getBlock(px, py, pz);
+      if (isSolid(block)) {
+        // 恢复位置到碰撞前
+        this.mesh.position.copy(oldPos);
+
+        // 判断碰撞方向
+        const oldPx = Math.floor(oldPos.x);
+        const oldPy = Math.floor(oldPos.y);
+        const oldPz = Math.floor(oldPos.z);
+
+        if (oldPx !== px) { this.velocity.x *= -0.3; }
+        if (oldPz !== pz) { this.velocity.z *= -0.3; }
+        if (oldPy !== py) {
+          // 落地碰撞 - 大幅减速
+          this.velocity.y *= -0.2;
+          this.velocity.x *= 0.5;
+          this.velocity.z *= 0.5;
+        }
+
+        // 速度很小时直接停止
+        if (Math.abs(this.velocity.x) < 0.5) this.velocity.x = 0;
+        if (Math.abs(this.velocity.z) < 0.5) this.velocity.z = 0;
+        if (Math.abs(this.velocity.y) < 0.5) this.velocity.y = 0;
+      }
     }
 
     // 引线火星闪烁
@@ -592,7 +619,7 @@ export class GrenadeTrajectory {
   }
 
   /** 计算并显示抛物线 */
-  show(origin, direction, throwSpeed) {
+  show(origin, direction, throwSpeed, world) {
     this.hide();
 
     const vel = direction.clone().multiplyScalar(throwSpeed || 20);
@@ -607,6 +634,13 @@ export class GrenadeTrajectory {
       this.points.push(pos.clone());
       curVel.add(gravity.clone().multiplyScalar(dt));
       pos.add(curVel.clone().multiplyScalar(dt));
+      // 检测方块碰撞
+      if (world) {
+        const bx = Math.floor(pos.x);
+        const by = Math.floor(pos.y);
+        const bz = Math.floor(pos.z);
+        if (by >= 0 && by < CHUNK_HEIGHT && isSolid(world.getBlock(bx, by, bz))) break;
+      }
       if (pos.y < 0) break;
     }
 
@@ -1376,7 +1410,7 @@ export class WeaponManager {
     // 更新手榴弹
     for (let i = this.grenades.length - 1; i >= 0; i--) {
       const grenade = this.grenades[i];
-      grenade.update(dt);
+      grenade.update(dt, this.world);
       if (!grenade.alive) {
         this.grenades.splice(i, 1);
       }

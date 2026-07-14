@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=37';
-import { AnimalManager } from './animals.js?v=37';
+} from './voxel.js?v=38';
+import { AnimalManager } from './animals.js?v=38';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=37';
-import { audio } from './audio.js?v=37';
+} from './weapons.js?v=38';
+import { audio } from './audio.js?v=38';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -2389,7 +2389,7 @@ class Game {
           if (this._rightMouseDown && currentItem && currentItem.weaponType === WeaponType.GRENADE) {
             const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
             const wDef = WeaponDefs[WeaponType.GRENADE];
-            this.grenadeTrajectory.show(this.camera.position.clone(), dir, wDef.throwSpeed || 20);
+            this.grenadeTrajectory.show(this.camera.position.clone(), dir, wDef.throwSpeed || 20, this.world);
           } else {
             this.grenadeTrajectory.hide();
           }
