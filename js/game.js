@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=49';
-import { AnimalManager } from './animals.js?v=49';
+} from './voxel.js?v=50';
+import { AnimalManager } from './animals.js?v=50';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=49';
-import { audio } from './audio.js?v=49';
+} from './weapons.js?v=50';
+import { audio } from './audio.js?v=50';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -2027,7 +2027,7 @@ class Game {
           this.isInventoryOpen = false;
           if (this.inventoryUI) this.inventoryUI.close();
           this._showGameUI(true);
-        } else if (this.isRunning && !this.isInventoryOpen && !this._inventoryJustClosed) {
+        } else if (this.isRunning && !this.isInventoryOpen && !this._inventoryJustClosed && !this.isSettingsOpen) {
           this._pointerLockExitTime = performance.now();
           this.ui.pauseScreen.style.display = 'flex';
           // 失去指针锁定时关闭瞄准镜
@@ -2043,9 +2043,9 @@ class Game {
       });
 
       const requestLock = () => {
-        if (!this.isPointerLocked && this.isRunning && !this.isInventoryOpen) {
+        if (!this.isPointerLocked && this.isRunning && !this.isInventoryOpen && !this.isSettingsOpen) {
           const now = performance.now();
-          if (now - this._pointerLockExitTime < 800) return;
+          if (now - this._pointerLockExitTime < 300) return;
           try {
             const p = this.canvas.requestPointerLock();
             if (p && typeof p.catch === 'function') p.catch(() => {});
