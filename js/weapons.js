@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=64';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=65';
 
 /* ============================================
    武器类型定义
@@ -26,7 +26,7 @@ export const WeaponDefs = {
   [WeaponType.FIST]: {
     name: '拳头',
     type: 'melee',
-    damage: 1,
+    damage: 2,
     range: 4,
     cooldown: 0.4,
     blockDamage: 1,
@@ -35,7 +35,7 @@ export const WeaponDefs = {
   [WeaponType.SWORD]: {
     name: '像素剑',
     type: 'melee',
-    damage: 5,
+    damage: 10,
     range: 5,
     cooldown: 0.35,
     blockDamage: 2,
@@ -44,7 +44,7 @@ export const WeaponDefs = {
   [WeaponType.AXE]: {
     name: '战斧',
     type: 'melee',
-    damage: 8,
+    damage: 16,
     range: 4.5,
     cooldown: 0.4,
     blockDamage: 4,
@@ -53,7 +53,7 @@ export const WeaponDefs = {
   [WeaponType.PICKAXE]: {
     name: '镐',
     type: 'melee',
-    damage: 3,
+    damage: 6,
     range: 4,
     cooldown: 0.3,
     blockDamage: 6,
@@ -123,7 +123,7 @@ export const WeaponDefs = {
     blockDamage: 2,
     bulletSpeed: 120,
     bulletColor: 0x00E5FF,
-    bulletSize: 0.1,
+    bulletSize: 0.06,
     recoil: 0.015,
     magSize: 30,
     reloadTime: 2.0,
@@ -155,11 +155,11 @@ export const WeaponDefs = {
   [WeaponType.GRENADE]: {
     name: '手榴弹',
     type: 'grenade',
-    damage: 30,
+    damage: 60,
     range: 30,
-    cooldown: 0.6,
+    cooldown: 0.4,
     blockDamage: 5,
-    blastRadius: 5,
+    blastRadius: 7,
     throwSpeed: 20,
     bodyColor: 0x2E7D32,
     pushback: 0,
@@ -428,7 +428,7 @@ class Grenade {
     this.scene = scene;
     this.alive = true;
     this.age = 0;
-    this.fuseTime = 2.5;
+    this.fuseTime = 1.5;
 
     // 手榴弹模型 - 小球体+引线
     const group = new THREE.Group();

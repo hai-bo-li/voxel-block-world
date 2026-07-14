@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=64';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=64';
-import { audio } from './audio.js?v=64';
+import { BlockType, isSolid } from './voxel.js?v=65';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=65';
+import { audio } from './audio.js?v=65';
 
 /* ============================================
    常量配置
@@ -29,7 +29,7 @@ const WANDER_RANGE = 20;
 const DETECTION_RANGE = 25;        // 检测玩家的距离
 const ATTACK_RANGE_MELEE = 2.0;    // 近战攻击距离
 const ATTACK_RANGE_RANGED = 20;    // 远程攻击距离
-const CHASE_SPEED_MULT = 1.5;      // 追击速度倍率（降低）
+const CHASE_SPEED_MULT = 1.3;      // 追击速度倍率（降低）
 // 模型默认朝 +Z；Three.js Y 旋转 θ 使 +Z 朝向 (sinθ, cosθ)
 // 因此朝向 (dx,dz) 的旋转角 = atan2(dx, dz)（dx 在前, dz 在后）
 const ATTACK_COOLDOWN_MELEE = 1.2; // 近战冷却
@@ -709,8 +709,8 @@ class ScoutBot extends Robot {
     super(scene, world, x, y, z);
     this.collisionWidth = 0.7;
     this.collisionHeight = 1.0;
-    this.wanderSpeed = 1.1;
-    this.turnSpeed = 2.8;
+    this.wanderSpeed = 0.8;
+    this.turnSpeed = 2.0;
     this.antennaAngle = 0;
 
     this.robotType = 'scout';
@@ -809,10 +809,9 @@ class HeavyBot extends Robot {
     super(scene, world, x, y, z);
     this.collisionWidth = 0.85;
     this.collisionHeight = 1.15;
-    this.wanderSpeed = 0.7;
-    this.turnSpeed = 2.0;
+    this.wanderSpeed = 0.5;
+    this.turnSpeed = 1.5;
     this.antennaAngle = 0;
-
     this.robotType = 'heavy';
     // 重型机器人属性
     this.maxHP = 80;
@@ -953,7 +952,7 @@ export class FlyerBot extends Robot {
     this.maxHP = 25;
     this.hp = 25;
     this.robotType = 'flyer';
-    this.speed = 3.5;
+    this.speed = 2.5;
     this.attackDamage = 4;
     this.attackRange = 18;        // 远程射击距离
     this.detectRange = 28;
@@ -1099,9 +1098,9 @@ export class BruteBot extends Robot {
     this.robotType = 'brute';
     this.maxHP = 120;
     this.hp = 120;
-    this.speed = 1.3;
-    this.wanderSpeed = 0.8;
-    this.turnSpeed = 1.8;
+    this.speed = 1.0;
+    this.wanderSpeed = 0.6;
+    this.turnSpeed = 1.3;
     this.attackDamage = 12;
     this.attackRange = 2.8;
     this._baseAttackCooldown = 1.8;
@@ -1211,9 +1210,9 @@ export class SpiderBot extends Robot {
     this.robotType = 'spider';
     this.maxHP = 15;
     this.hp = 15;
-    this.speed = 4.5;
-    this.wanderSpeed = 2.5;
-    this.turnSpeed = 5.0;
+    this.speed = 3.0;
+    this.wanderSpeed = 1.8;
+    this.turnSpeed = 3.5;
     this.attackDamage = 3;
     this.attackRange = 1.5;
     this._baseAttackCooldown = 0.8;
@@ -1298,7 +1297,7 @@ export class AnimalManager {
     this.spawnCenter = new THREE.Vector3(0, 0, 0);
     this._spawned = false;
     this._respawnQueue = [];        // 等待重生的敌人
-    this.respawnDelay = 10;         // 死亡后10秒重生
+    this.respawnDelay = 5;          // 死亡后5秒重生
     this.totalKills = 0;            // 总击杀数
   }
 
