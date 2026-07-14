@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=66';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=67';
 
 /* ============================================
    武器类型定义
@@ -123,7 +123,7 @@ export const WeaponDefs = {
     blockDamage: 2,
     bulletSpeed: 120,
     bulletColor: 0x00E5FF,
-    bulletSize: 0.06,
+    bulletSize: 0.02,
     recoil: 0.015,
     magSize: 30,
     reloadTime: 2.0,
