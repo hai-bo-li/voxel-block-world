@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=74';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=73';
 
 /* ============================================
    武器类型定义
@@ -540,9 +540,7 @@ class Grenade {
 
     // 对玩家造成伤害
     if (this.owner) {
-      const dx = this.owner.position.x - pos.x;
-      const dz = this.owner.position.z - pos.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
+      const dist = pos.distanceTo(this.owner.position);
       if (dist < radius) {
         const dmg = Math.round(this.weaponDef.damage * (1 - dist / radius));
         if (dmg > 0 && this._weaponManager) {
