@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=27';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=28';
 
 /* ============================================
    武器类型定义
@@ -186,7 +186,9 @@ class Bullet {
     this.maxAge = weaponDef.range / weaponDef.bulletSpeed + 0.5;
 
     const size = weaponDef.bulletSize || 0.1;
-    const geo = new THREE.BoxGeometry(size, size, size * 3);
+    // 自动武器用更小的子弹，减少视觉混乱
+    const actualSize = weaponDef.auto ? size * 0.7 : size;
+    const geo = new THREE.BoxGeometry(actualSize, actualSize, actualSize * 2.5);
     const mat = new THREE.MeshBasicMaterial({ color: weaponDef.bulletColor });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.position.copy(origin);
@@ -198,16 +200,17 @@ class Bullet {
       origin.z + direction.z
     );
 
-    // 发光效果（自动武器缩小发光以避免视觉混乱）
-    const glowScale = weaponDef.auto ? 1.5 : 2.5;
-    const glowMat = new THREE.MeshBasicMaterial({
-      color: weaponDef.bulletColor,
-      transparent: true,
-      opacity: weaponDef.auto ? 0.2 : 0.3,
-    });
-    const glowGeo = new THREE.BoxGeometry(size * glowScale, size * glowScale, size * (glowScale + 1));
-    this.glow = new THREE.Mesh(glowGeo, glowMat);
-    this.mesh.add(this.glow);
+    // 发光效果（自动武器不添加发光，减少视觉混乱）
+    if (!weaponDef.auto) {
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: weaponDef.bulletColor,
+        transparent: true,
+        opacity: 0.3,
+      });
+      const glowGeo = new THREE.BoxGeometry(size * 2.5, size * 2.5, size * 4);
+      this.glow = new THREE.Mesh(glowGeo, glowMat);
+      this.mesh.add(this.glow);
+    }
 
     scene.add(this.mesh);
   }
@@ -1278,23 +1281,41 @@ export class InventoryUI {
     this.isOpen = false;
     this.dragFrom = -1;
 
-    this.container = document.createElement('div');
-    this.container.id = 'inventoryPanel';
-    this.container.style.display = 'none';
-    document.body.appendChild(this.container);
+    // 使用已有的HTML元素，不重复创建
+    this.screen = document.getElementById('inventoryScreen');
+    this.panel = document.getElementById('inventoryPanel');
+    this.grid = document.getElementById('inventoryGrid');
+
+    // 如果没有现有元素，创建一个
+    if (!this.screen) {
+      this.screen = document.createElement('div');
+      this.screen.id = 'inventoryScreen';
+      this.screen.style.display = 'none';
+      document.body.appendChild(this.screen);
+    }
+    if (!this.panel) {
+      this.panel = document.createElement('div');
+      this.panel.id = 'inventoryPanel';
+      this.screen.appendChild(this.panel);
+    }
+    if (!this.grid) {
+      this.grid = document.createElement('div');
+      this.grid.id = 'inventoryGrid';
+      this.panel.appendChild(this.grid);
+    }
 
     this._buildUI();
   }
 
   _buildUI() {
-    this.container.innerHTML = '';
-    this.container.className = 'inventory-panel';
+    this.panel.innerHTML = '';
 
     const title = document.createElement('div');
     title.className = 'inv-title';
     title.textContent = '背包';
-    this.container.appendChild(title);
+    this.panel.appendChild(title);
 
+    // 快捷栏区域
     const hotbarSection = document.createElement('div');
     hotbarSection.className = 'inv-section';
     const hotbarLabel = document.createElement('div');
@@ -1305,35 +1326,56 @@ export class InventoryUI {
     const hotbarGrid = document.createElement('div');
     hotbarGrid.className = 'inv-grid inv-hotbar-grid';
     for (let i = 0; i < this.inventory.cols; i++) {
-      hotbarGrid.appendChild(this._createSlot(i));
+      hotbarGrid.appendChild(this._createSlot(i, true));
     }
     hotbarSection.appendChild(hotbarGrid);
-    this.container.appendChild(hotbarSection);
+    this.panel.appendChild(hotbarSection);
 
-    const backpackSection = document.createElement('div');
-    backpackSection.className = 'inv-section';
+    // 背包区域
+    const bpSection = document.createElement('div');
+    bpSection.className = 'inv-section';
     const bpLabel = document.createElement('div');
     bpLabel.className = 'inv-section-label';
     bpLabel.textContent = '背包';
-    backpackSection.appendChild(bpLabel);
+    bpSection.appendChild(bpLabel);
 
     const bpGrid = document.createElement('div');
     bpGrid.className = 'inv-grid inv-backpack-grid';
     for (let i = this.inventory.cols; i < this.inventory.slots.length; i++) {
-      bpGrid.appendChild(this._createSlot(i));
+      bpGrid.appendChild(this._createSlot(i, false));
     }
-    backpackSection.appendChild(bpGrid);
-    this.container.appendChild(backpackSection);
+    bpSection.appendChild(bpGrid);
+    this.panel.appendChild(bpSection);
+
+    // 关闭提示
+    const closeHint = document.createElement('div');
+    closeHint.className = 'inv-close-hint';
+    closeHint.textContent = '点击物品选中，再点击另一个位置交换 | 按 E/B/ESC 关闭';
+    this.panel.appendChild(closeHint);
   }
 
-  _createSlot(index) {
+  _createSlot(index, isHotbar) {
     const slot = document.createElement('div');
-    slot.className = 'inv-slot';
+    slot.className = `inv-slot${isHotbar ? ' hotbar-slot-inv' : ''}`;
     slot.dataset.index = index;
 
     const item = this.inventory.slots[index];
     if (item) {
-      slot.textContent = this._itemLabel(item);
+      // 彩色预览块
+      const preview = document.createElement('div');
+      preview.className = 'inv-preview';
+      const color = this._itemColor(item);
+      preview.style.background = color;
+      preview.style.boxShadow = `0 0 6px ${color}, inset -2px -2px 0 rgba(0,0,0,0.25), inset 2px 2px 0 rgba(255,255,255,0.15)`;
+      slot.appendChild(preview);
+
+      // 物品名称
+      const name = document.createElement('div');
+      name.className = 'inv-name';
+      name.textContent = this._itemLabel(item);
+      slot.appendChild(name);
+
+      // 数量
       if (item.count > 1) {
         const countEl = document.createElement('span');
         countEl.className = 'inv-count';
@@ -1342,24 +1384,50 @@ export class InventoryUI {
       }
     }
 
-    slot.addEventListener('click', () => {
+    // 选中高亮
+    if (this.dragFrom === index) {
+      slot.classList.add('inv-selected');
+    }
+
+    slot.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (this.dragFrom >= 0 && this.dragFrom !== index) {
         this.inventory.swapSlots(this.dragFrom, index);
         this.dragFrom = -1;
         this._buildUI();
+      } else if (this.dragFrom === index) {
+        this.dragFrom = -1;
+        this._buildUI();
       } else {
         this.dragFrom = index;
+        this._buildUI();
       }
     });
 
     return slot;
   }
 
+  _itemColor(item) {
+    if (item.type === 'block') {
+      return `#${(getBlockColor(item.blockType) || '#888888').replace('#', '')}`;
+    }
+    if (item.type === 'weapon') {
+      const wDef = WeaponDefs[item.weaponType];
+      const c = wDef ? (wDef.bodyColor || wDef.bulletColor || 0x888888) : 0x888888;
+      return `#${c.toString(16).padStart(6, '0')}`;
+    }
+    if (item.type === 'ammo') {
+      const colors = { pistol: '#FFEB3B', rifle: '#00E5FF', shotgun: '#FF6D00', smg: '#76FF03', sniper: '#E040FB' };
+      return colors[item.ammoType] || '#888';
+    }
+    return '#888';
+  }
+
   _itemLabel(item) {
     if (item.type === 'block') return BlockNames[item.blockType] || '?';
     if (item.type === 'weapon') return WeaponDefs[item.weaponType]?.name || '?';
     if (item.type === 'ammo') {
-      const names = { pistol: '手枪弹', rifle: '步枪弹', shotgun: '霰弹' };
+      const names = { pistol: '手枪弹', rifle: '步枪弹', shotgun: '霰弹', smg: '冲锋枪弹', sniper: '狙击弹' };
       return names[item.ammoType] || '弹药';
     }
     return '?';
@@ -1368,11 +1436,12 @@ export class InventoryUI {
   open() {
     this.isOpen = true;
     this._buildUI();
-    this.container.style.display = 'flex';
+    this.screen.style.display = 'flex';
   }
 
   close() {
     this.isOpen = false;
-    this.container.style.display = 'none';
+    this.dragFrom = -1;
+    this.screen.style.display = 'none';
   }
 }

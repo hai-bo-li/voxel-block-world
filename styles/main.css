@@ -772,6 +772,73 @@ html, body {
   margin-top: 16px;
 }
 
+/* 背包优化样式 */
+.inv-title {
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 14px;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+  padding-bottom: 10px;
+  letter-spacing: 2px;
+}
+
+.inv-section {
+  margin-bottom: 10px;
+}
+
+.inv-section-label {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  margin: 8px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.inv-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+
+.inv-hotbar-grid {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.inv-backpack-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 4px;
+}
+
+.inv-slot .inv-preview {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.inv-slot.inv-selected {
+  border-color: #4FC3F7 !important;
+  background: rgba(79, 195, 247, 0.15) !important;
+  box-shadow: 0 0 8px rgba(79, 195, 247, 0.4);
+}
+
+.inv-close-hint {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 12px;
+  text-align: center;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
 /* ============================================
    武器/弹药物品栏样式增强
    ============================================ */

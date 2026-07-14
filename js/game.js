@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=27';
-import { AnimalManager } from './animals.js?v=27';
+} from './voxel.js?v=28';
+import { AnimalManager } from './animals.js?v=28';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=27';
-import { audio } from './audio.js?v=27';
+} from './weapons.js?v=28';
+import { audio } from './audio.js?v=28';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1022,13 +1022,14 @@ class Game {
       const wType = this.weaponManager.currentWeapon;
       const wDef = WeaponDefs[wType];
       if (wDef && wDef.pushback) {
-        const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.camera.quaternion);
-        // 直接位移（立即反馈）
-        this.player.position.x -= dir.x * wDef.pushback * 0.15;
-        this.player.position.z -= dir.z * wDef.pushback * 0.15;
+        // 相机后方方向（0,0,1 是相机局部空间的背后方向）
+        const backDir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.camera.quaternion);
+        // 直接位移（立即反馈）- 沿后方移动 = 后退
+        this.player.position.x += backDir.x * wDef.pushback * 0.15;
+        this.player.position.z += backDir.z * wDef.pushback * 0.15;
         // 叠加持续后退速度
-        this.player.knockbackVel.x -= dir.x * wDef.pushback * 5;
-        this.player.knockbackVel.z -= dir.z * wDef.pushback * 5;
+        this.player.knockbackVel.x += backDir.x * wDef.pushback * 5;
+        this.player.knockbackVel.z += backDir.z * wDef.pushback * 5;
         this.player.knockbackVel.y += wDef.pushback * 1.5;
       }
     };
@@ -1756,7 +1757,7 @@ class Game {
       }
 
       if (this.isInventoryOpen) {
-        if (e.code === 'KeyE' || e.code === 'Escape') {
+        if (e.code === 'KeyE' || e.code === 'KeyB' || e.code === 'Escape') {
           this.inventoryUI.close();
           this.isInventoryOpen = false;
           if (!this.isMobile) this.canvas.requestPointerLock();
@@ -1850,8 +1851,15 @@ class Game {
         if (currentItem && currentItem.type === 'weapon') {
           const wDef = WeaponDefs[currentItem.weaponType];
           if (wDef && wDef.type === 'ranged') {
-            this._toggleScope(true);
-            this.weaponManager.renderer.setScopeActive(true);
+            if (wDef.auto) {
+              // 自动武器：右键长按连射
+              this._weaponAttack();
+              this._isFiring = true;
+            } else {
+              // 狙击枪/手枪/霰弹枪：右键瞄准
+              this._toggleScope(true);
+              this.weaponManager.renderer.setScopeActive(true);
+            }
           }
         } else {
           this.player.breakBlock();
@@ -1864,9 +1872,12 @@ class Game {
       if (e.button === 0) {
         this._isFiring = false;
       }
-      if (e.button === 2 && this.isAiming) {
-        this._toggleScope(false);
-        this.weaponManager.renderer.setScopeActive(false);
+      if (e.button === 2) {
+        this._isFiring = false; // 停止右键连射
+        if (this.isAiming) {
+          this._toggleScope(false);
+          this.weaponManager.renderer.setScopeActive(false);
+        }
       }
     });
 
@@ -2023,7 +2034,19 @@ class Game {
 
     if (wDef.type === 'ranged') {
       this.weaponManager.shoot(weaponType, this.player);
-      audio.shoot();
+      // 根据武器类型传递不同音高和音量
+      const pitchMap = {
+        [WeaponType.PISTOL]: 900,
+        [WeaponType.RIFLE]: 1100,
+        [WeaponType.SNIPER]: 500,
+      };
+      if (weaponType === WeaponType.SHOTGUN) {
+        audio.shotgun();
+      } else if (weaponType === WeaponType.SMG) {
+        audio.smg();
+      } else {
+        audio.shoot(pitchMap[weaponType] || 800);
+      }
     } else {
       this.weaponManager.meleeAttack(weaponType, this.player);
       audio.swing();

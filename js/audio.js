@@ -45,6 +45,7 @@ class AudioManager {
 
     switch (type) {
       case 'shoot': this._shootSound(ctx, now, gain, params); break;
+      case 'smg': this._smgSound(ctx, now, gain, params); break;
       case 'shotgun': this._shotgunSound(ctx, now, gain, params); break;
       case 'swing': this._swingSound(ctx, now, gain, params); break;
       case 'hit': this._hitSound(ctx, now, gain, params); break;
@@ -60,8 +61,11 @@ class AudioManager {
 
   /** 激光手枪/步枪射击 - 短促电子音 */
   _shootSound(ctx, now, gain, params) {
+    const basePitch = params.pitch || 800;
+    // 添加随机音高偏移，让连续射击不那么单调
+    const variation = 1 + (Math.random() - 0.5) * 0.15;
+    const freq = basePitch * variation;
     const osc = ctx.createOscillator();
-    const freq = params.pitch || 800;
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(freq, now);
     osc.frequency.exponentialRampToValueAtTime(freq * 0.3, now + 0.08);
@@ -70,6 +74,20 @@ class AudioManager {
     osc.connect(gain);
     osc.start(now);
     osc.stop(now + 0.1);
+
+    // 高频泛音增加层次感
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'square';
+    const freq2 = freq * 2 * variation;
+    osc2.frequency.setValueAtTime(freq2, now);
+    osc2.frequency.exponentialRampToValueAtTime(freq2 * 0.2, now + 0.06);
+    const g2 = ctx.createGain();
+    g2.connect(ctx.destination);
+    g2.gain.setValueAtTime(this.volume * 0.08, now);
+    g2.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    osc2.connect(g2);
+    osc2.start(now);
+    osc2.stop(now + 0.06);
   }
 
   /** 霰弹枪 - 低沉爆破音 */
@@ -100,6 +118,39 @@ class AudioManager {
     osc.connect(g2);
     osc.start(now);
     osc.stop(now + 0.15);
+  }
+
+  /** 冲锋枪连续射击 - 短促哒哒声 */
+  _smgSound(ctx, now, gain, params) {
+    const variation = 1 + (Math.random() - 0.5) * 0.2;
+    const freq = (1200 + Math.random() * 400) * variation;
+
+    // 极短脉冲 - 哒哒声
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.4, now + 0.04);
+    gain.gain.setValueAtTime(this.volume * 0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.connect(gain);
+    osc.start(now);
+    osc.stop(now + 0.05);
+
+    // 噪声层 - 机械感
+    const bufSize = Math.floor(ctx.sampleRate * 0.03);
+    const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.2));
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const g2 = ctx.createGain();
+    g2.connect(ctx.destination);
+    g2.gain.setValueAtTime(this.volume * 0.08, now);
+    g2.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+    noise.connect(g2);
+    noise.start(now);
   }
 
   /** 近战挥砍 - 嗖嗖声 */
@@ -271,6 +322,7 @@ class AudioManager {
 
   // === 公开接口 ===
   shoot(pitch) { this._play('shoot', { pitch }); }
+  smg() { this._play('smg'); }
   shotgun() { this._play('shotgun'); }
   swing() { this._play('swing'); }
   hit() { this._play('hit'); }
