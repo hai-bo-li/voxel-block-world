@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=34';
-import { AnimalManager } from './animals.js?v=34';
+} from './voxel.js?v=35';
+import { AnimalManager } from './animals.js?v=35';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=34';
-import { audio } from './audio.js?v=34';
+} from './weapons.js?v=35';
+import { audio } from './audio.js?v=35';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1025,6 +1025,52 @@ class Game {
         this.player.knockbackVel.y += wDef.pushback * 0.8; // 轻微上仰
       }
     };
+
+    // 手榴弹爆炸回调
+    this.weaponManager.onBlockExplode = (center, radius, damage) => {
+      // 破坏爆炸范围内的方块
+      const r = Math.ceil(radius);
+      for (let x = -r; x <= r; x++) {
+        for (let y = -r; y <= r; y++) {
+          for (let z = -r; z <= r; z++) {
+            const bx = Math.floor(center.x) + x;
+            const by = Math.floor(center.y) + y;
+            const bz = Math.floor(center.z) + z;
+            const dist = Math.sqrt(x * x + y * y + z * z);
+            if (dist <= radius) {
+              const block = this.world.getBlock(bx, by, bz);
+              if (block && block !== BlockType.AIR && block !== BlockType.WATER) {
+                this.world.setBlock(bx, by, bz, BlockType.AIR);
+              }
+            }
+          }
+        }
+      }
+    };
+
+    this.weaponManager.onPlayerHurt = (damage, fromPos) => {
+      this.player.takeDamage(damage, fromPos);
+    };
+
+    this.weaponManager.onGrenadeExplode = () => {
+      audio.explosion();
+    };
+
+    // 手榴弹范围伤害回调
+    this.weaponManager.onAreaDamage = (center, damage, radius) => {
+      if (!this.animalManager) return;
+      for (const robot of this.animalManager.robots) {
+        if (!robot.alive) continue;
+        const dist = center.distanceTo(robot.mesh.position);
+        if (dist <= radius) {
+          const dmg = Math.round(damage * (1 - dist / radius));
+          if (dmg > 0) {
+            robot.takeDamage(dmg, center, true);
+            this._showHitMarker();
+          }
+        }
+      }
+    };
   }
 
   _initHighlight() {
@@ -1852,19 +1898,13 @@ class Game {
         if (currentItem && currentItem.type === 'weapon') {
           const wDef = WeaponDefs[currentItem.weaponType];
           if (wDef && wDef.type === 'ranged') {
-            if (wDef.auto) {
-              // 自动武器：右键长按连射
-              this._weaponAttack();
-              this._isFiring = true;
+            // 远程武器：右键切换瞄准（再按关闭）
+            if (this.isAiming) {
+              this._toggleScope(false);
+              this.weaponManager.renderer.setScopeActive(false);
             } else {
-              // 狙击枪/手枪/霰弹枪：右键切换瞄准（再按关闭）
-              if (this.isAiming) {
-                this._toggleScope(false);
-                this.weaponManager.renderer.setScopeActive(false);
-              } else {
-                this._toggleScope(true);
-                this.weaponManager.renderer.setScopeActive(true);
-              }
+              this._toggleScope(true);
+              this.weaponManager.renderer.setScopeActive(true);
             }
           }
         } else {
@@ -1873,13 +1913,10 @@ class Game {
       }
     });
 
-    // 鼠标释放：停止瞄准 + 停止自动射击
+    // 鼠标释放：停止自动射击
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) {
         this._isFiring = false;
-      }
-      if (e.button === 2) {
-        this._isFiring = false; // 停止右键连射
       }
     });
 
@@ -2037,7 +2074,10 @@ class Game {
     if (!wDef) return;
 
     if (wDef.type === 'ranged') {
-      this.weaponManager.shoot(weaponType, this.player);
+      // 换弹或冷却中不射击也不播放音效
+      if (this.weaponManager.isReloading || this.weaponManager.cooldownTimer > 0) return;
+      const shot = this.weaponManager.shoot(weaponType, this.player);
+      if (shot === false) return; // 射击失败（无弹药等）
       // 根据武器类型传递不同音高和音量
       const pitchMap = {
         [WeaponType.PISTOL]: 900,
@@ -2050,6 +2090,21 @@ class Game {
         audio.smg();
       } else {
         audio.shoot(pitchMap[weaponType] || 800);
+      }
+    } else if (wDef.type === 'grenade') {
+      // 手榴弹投掷
+      if (this.weaponManager.cooldownTimer > 0) return;
+      const thrown = this.weaponManager.throwGrenade(this.player);
+      if (thrown) {
+        audio.swing(); // 投掷音效
+        // 减少背包中的手榴弹数量
+        const item = this.inventory.getCurrentItem();
+        if (item) {
+          item.count = this.weaponManager.grenadeCount;
+          if (item.count <= 0) {
+            this.inventory.slots[this.inventory.selectedSlot] = null;
+          }
+        }
       }
     } else {
       this.weaponManager.meleeAttack(weaponType, this.player);

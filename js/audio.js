@@ -56,6 +56,7 @@ class AudioManager {
       case 'block_break': this._blockBreakSound(ctx, now, gain, params); break;
       case 'quest': this._questSound(ctx, now, gain, params); break;
       case 'wave': this._waveSound(ctx, now, gain, params); break;
+      case 'explosion': this._explosionSound(ctx, now, gain); break;
     }
   }
 
@@ -151,6 +152,49 @@ class AudioManager {
     g2.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
     noise.connect(g2);
     noise.start(now);
+  }
+
+  /** 爆炸音效 - 沉闷轰鸣 */
+  _explosionSound(ctx, now, gain) {
+    // 低频轰鸣
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(80, now);
+    osc.frequency.exponentialRampToValueAtTime(20, now + 0.5);
+    gain.gain.setValueAtTime(this.volume * 0.6, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    osc.connect(gain);
+    osc.start(now);
+    osc.stop(now + 0.5);
+
+    // 噪声冲击波
+    const bufSize = Math.floor(ctx.sampleRate * 0.4);
+    const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.08));
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const g2 = ctx.createGain();
+    g2.connect(ctx.destination);
+    g2.gain.setValueAtTime(this.volume * 0.5, now);
+    g2.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    noise.connect(g2);
+    noise.start(now);
+
+    // 中频碎裂声
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sawtooth';
+    osc2.frequency.setValueAtTime(200, now);
+    osc2.frequency.exponentialRampToValueAtTime(50, now + 0.2);
+    const g3 = ctx.createGain();
+    g3.connect(ctx.destination);
+    g3.gain.setValueAtTime(this.volume * 0.25, now);
+    g3.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    osc2.connect(g3);
+    osc2.start(now);
+    osc2.stop(now + 0.2);
   }
 
   /** 近战挥砍 - 嗖嗖声 */
@@ -333,6 +377,7 @@ class AudioManager {
   blockBreak() { this._play('block_break'); }
   quest() { this._play('quest'); }
   wave() { this._play('wave'); }
+  explosion() { this._play('explosion'); }
 }
 
 // 全局单例

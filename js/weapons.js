@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=34';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=35';
 
 /* ============================================
    武器类型定义
@@ -18,6 +18,7 @@ export const WeaponType = {
   SNIPER: 'sniper',
   RIFLE: 'rifle',
   SHOTGUN: 'shotgun',
+  GRENADE: 'grenade',
 };
 
 /** 武器属性配置 */
@@ -85,7 +86,7 @@ export const WeaponDefs = {
     blockDamage: 1,
     bulletSpeed: 100,
     bulletColor: 0x55cc00,
-    bulletSize: 0.04,
+    bulletSize: 0.03,
     recoil: 0.003,
     magSize: 40,
     reloadTime: 1.8,
@@ -150,6 +151,18 @@ export const WeaponDefs = {
     spread: 0.08,
     bodyColor: 0x4E342E,
     pushback: 2.0,
+  },
+  [WeaponType.GRENADE]: {
+    name: '手榴弹',
+    type: 'grenade',
+    damage: 30,
+    range: 30,
+    cooldown: 1.5,
+    blockDamage: 5,
+    blastRadius: 5,
+    throwSpeed: 20,
+    bodyColor: 0x2E7D32,
+    pushback: 0,
   },
 };
 
@@ -287,7 +300,7 @@ class Bullet {
     const color = _getBlockParticleColor(blockType);
     const count = this.weaponDef?.auto ? 2 : 4;
     for (let i = 0; i < count; i++) {
-      const size = 0.08 + Math.random() * 0.06;
+      const size = this.weaponDef?.auto ? (0.03 + Math.random() * 0.03) : (0.06 + Math.random() * 0.06);
       const geo = new THREE.BoxGeometry(size, size, size);
       const mat = new THREE.MeshBasicMaterial({ color });
       const particle = new THREE.Mesh(geo, mat);
@@ -364,7 +377,7 @@ export function spawnHitEffect(scene, position, color, isAuto = false) {
   // 受击粒子爆炸
   const count = isAuto ? 3 : 8;
   for (let i = 0; i < count; i++) {
-    const size = isAuto ? (0.04 + Math.random() * 0.04) : (0.06 + Math.random() * 0.08);
+    const size = isAuto ? (0.02 + Math.random() * 0.03) : (0.05 + Math.random() * 0.06);
     const geo = new THREE.BoxGeometry(size, size, size);
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
     const particle = new THREE.Mesh(geo, mat);
@@ -390,6 +403,136 @@ export function computeKnockback(hitPos, fromPos, strength) {
   dir.y = 0.3; // 向上偏移一点
   return dir.multiplyScalar(strength);
 }
+
+/* ============================================
+   手榴弹系统
+   ============================================ */
+class Grenade {
+  constructor(origin, direction, weaponDef, scene, owner, weaponManager) {
+    this.weaponDef = weaponDef;
+    this.owner = owner;
+    this._weaponManager = weaponManager;
+    this.scene = scene;
+    this.alive = true;
+    this.age = 0;
+    this.fuseTime = 2.5; // 2.5秒后爆炸
+
+    // 手榴弹模型
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2E7D32 });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), bodyMat);
+    body.position.copy(origin);
+    this.mesh = body;
+
+    // 投掷速度
+    this.velocity = direction.clone().multiplyScalar(weaponDef.throwSpeed || 20);
+    this.velocity.y += 5; // 上抛弧线
+
+    scene.add(this.mesh);
+  }
+
+  update(dt) {
+    if (!this.alive) return;
+
+    // 重力
+    this.velocity.y -= 20 * dt;
+
+    // 移动
+    this.mesh.position.add(this.velocity.clone().multiplyScalar(dt));
+    this.mesh.rotation.x += dt * 3;
+    this.mesh.rotation.z += dt * 2;
+
+    // 地面弹跳
+    if (this.mesh.position.y < 0.12) {
+      this.mesh.position.y = 0.12;
+      this.velocity.y = Math.abs(this.velocity.y) * 0.3;
+      this.velocity.x *= 0.7;
+      this.velocity.z *= 0.7;
+    }
+
+    this.age += dt;
+    if (this.age >= this.fuseTime) {
+      this.explode();
+    }
+  }
+
+  explode() {
+    this.alive = false;
+    const pos = this.mesh.position.clone();
+
+    // 从场景移除手榴弹模型
+    this.scene.remove(this.mesh);
+    if (this.mesh.geometry) this.mesh.geometry.dispose();
+    if (this.mesh.material) this.mesh.material.dispose();
+
+    // 爆炸粒子效果
+    this._spawnExplosionParticles(pos);
+
+    // 爆炸伤害 - 对范围内敌人造成伤害
+    const radius = this.weaponDef.blastRadius || 5;
+    if (this._weaponManager) {
+      this._weaponManager.onAreaDamage?.(pos, this.weaponDef.damage, radius);
+    }
+
+    // 爆炸破坏方块
+    this._destroyBlocks(pos, radius);
+
+    // 对玩家造成伤害
+    if (this.owner) {
+      const dist = pos.distanceTo(this.owner.position);
+      if (dist < radius) {
+        const dmg = Math.round(this.weaponDef.damage * (1 - dist / radius));
+        if (dmg > 0 && this._weaponManager) {
+          this._weaponManager.onPlayerHurt?.(dmg, pos);
+        }
+      }
+    }
+
+    // 爆炸音效
+    if (this._weaponManager) {
+      this._weaponManager.onGrenadeExplode?.();
+    }
+  }
+
+  _spawnExplosionParticles(pos) {
+    const count = 30;
+    for (let i = 0; i < count; i++) {
+      const isFire = i < count * 0.6;
+      const color = isFire
+        ? (Math.random() > 0.5 ? 0xFF6D00 : 0xFFAB00)
+        : 0x555555;
+      const size = isFire
+        ? (0.08 + Math.random() * 0.12)
+        : (0.04 + Math.random() * 0.06);
+      const geo = new THREE.BoxGeometry(size, size, size);
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+      const particle = new THREE.Mesh(geo, mat);
+      particle.position.copy(pos);
+
+      const speed = isFire ? 8 : 5;
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * speed,
+        Math.random() * speed * 0.8 + 2,
+        (Math.random() - 0.5) * speed
+      );
+      particle._vel = vel;
+      particle._life = 0.4 + Math.random() * 0.6;
+
+      this.scene.add(particle);
+      if (!this.scene._particles) this.scene._particles = [];
+      this.scene._particles.push(particle);
+    }
+  }
+
+  _destroyBlocks(center, radius) {
+    // 通过weaponManager回调通知game.js破坏方块
+    if (this._weaponManager) {
+      this._weaponManager.onBlockExplode?.(center, radius, this.weaponDef.blockDamage || 5);
+    }
+  }
+}
+
+/** 爆炸音效通知类型 */
+export const GrenadeEvent = { EXPLODE: 'grenade_explode' };
 
 /* ============================================
    武器渲染器 - 第一人称手持武器
@@ -425,6 +568,8 @@ export class WeaponRenderer {
     const def = WeaponDefs[weaponType];
     if (!def || weaponType === WeaponType.FIST) {
       this._buildFist();
+    } else if (weaponType === WeaponType.GRENADE) {
+      this._buildGrenade(def);
     } else if (def.type === 'melee') {
       this._buildMeleeWeapon(weaponType, def);
     } else {
@@ -440,6 +585,24 @@ export class WeaponRenderer {
     this.weaponGroup.add(palm);
   }
 
+  /** 构建手榴弹模型 */
+  _buildGrenade(def) {
+    const bodyMat = new THREE.MeshLambertMaterial({ color: def.bodyColor || 0x2E7D32 });
+    const handleMat = new THREE.MeshLambertMaterial({ color: 0x424242 });
+    // 手榴弹主体 - 圆球
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), bodyMat);
+    body.position.set(0.35, -0.28, -0.48);
+    this.weaponGroup.add(body);
+    // 顶部拉环柄
+    const lever = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.1, 0.02), handleMat);
+    lever.position.set(0.35, -0.2, -0.48);
+    this.weaponGroup.add(lever);
+    // 拉环
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.005, 6, 8), handleMat);
+    ring.position.set(0.35, -0.14, -0.48);
+    ring.rotation.y = Math.PI / 2;
+    this.weaponGroup.add(ring);
+  }
   /** 构建近战武器模型 */
   _buildMeleeWeapon(weaponType, def) {
     const mat = new THREE.MeshLambertMaterial({ color: def.color });
@@ -751,8 +914,14 @@ export class WeaponManager {
       }
     }
 
+    // 手榴弹数量
+    this.grenadeCount = 5;
+
     // 活跃子弹列表
     this.bullets = [];
+
+    // 活跃手榴弹列表
+    this.grenades = [];
 
     // 初始化粒子列表
     if (!this.scene._particles) this.scene._particles = [];
@@ -785,19 +954,19 @@ export class WeaponManager {
     this.onAmmoChanged?.();
   }
 
-  /** 射击（从game.js调用） */
+  /** 射击（从game.js调用），返回true表示成功 */
   shoot(weaponType, player) {
-    if (this.cooldownTimer > 0) return;
-    if (this.isReloading) return;
+    if (this.cooldownTimer > 0) return false;
+    if (this.isReloading) return false;
 
     const def = WeaponDefs[weaponType];
-    if (!def || def.type !== 'ranged') return;
+    if (!def || def.type !== 'ranged') return false;
 
     // 检查弹匣
     const ammo = this.currentAmmo[weaponType] ?? 0;
     if (ammo <= 0) {
       this.startReload(weaponType);
-      return;
+      return false;
     }
 
     this.currentWeapon = weaponType;
@@ -821,6 +990,8 @@ export class WeaponManager {
     if (this.currentAmmo[weaponType] <= 0) {
       this.startReload(weaponType);
     }
+
+    return true;
   }
 
   /** 开始换弹 */
@@ -847,6 +1018,38 @@ export class WeaponManager {
     this.cooldownTimer = def.cooldown;
     this._meleeAttack(def, player.yaw, player.pitch);
     this.onAmmoChanged?.();
+  }
+
+  /** 投掷手榴弹 */
+  throwGrenade(player) {
+    if (this.cooldownTimer > 0) return false;
+    if (this.grenadeCount <= 0) return false;
+
+    const def = WeaponDefs[WeaponType.GRENADE];
+    if (!def) return false;
+
+    this.cooldownTimer = def.cooldown;
+    this.grenadeCount--;
+
+    // 计算投掷方向
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
+    direction.x += Math.sin(player.pitch) * Math.sin(player.yaw) * 0.3;
+    direction.z += Math.sin(player.pitch) * Math.cos(player.yaw) * 0.3;
+    direction.y = -Math.sin(player.pitch) * 0.5;
+    direction.normalize();
+
+    const origin = player.position.clone();
+    origin.y += 1.5; // 从玩家头部位置投出
+
+    const grenade = new Grenade(origin, direction, def, this.scene, player, this);
+    this.grenades.push(grenade);
+
+    // 挥投动画
+    this.renderer.triggerSwing();
+
+    this.onAmmoChanged?.();
+    return true;
   }
 
   /** 放置方块时触发手部动画 */
@@ -1065,6 +1268,15 @@ export class WeaponManager {
       }
     }
 
+    // 更新手榴弹
+    for (let i = this.grenades.length - 1; i >= 0; i--) {
+      const grenade = this.grenades[i];
+      grenade.update(dt);
+      if (!grenade.alive) {
+        this.grenades.splice(i, 1);
+      }
+    }
+
     // 更新粒子
     const particles = this.scene._particles;
     if (particles) {
@@ -1110,15 +1322,17 @@ export class Inventory {
     this.slots[3] = { type: 'weapon', weaponType: WeaponType.SNIPER, count: 1 };
     this.slots[4] = { type: 'weapon', weaponType: WeaponType.SMG, count: 1 };
     this.slots[5] = { type: 'weapon', weaponType: WeaponType.SHOTGUN, count: 1 };
-    // 快捷栏 6-8: 方块
-    this.slots[6] = { type: 'block', blockType: BlockType.GRASS, count: 64 };
-    this.slots[7] = { type: 'block', blockType: BlockType.STONE, count: 64 };
-    this.slots[8] = { type: 'block', blockType: BlockType.WOOD, count: 64 };
+    // 快捷栏 6: 手榴弹
+    this.slots[6] = { type: 'weapon', weaponType: WeaponType.GRENADE, count: 5 };
+    // 快捷栏 7-8: 方块
+    this.slots[7] = { type: 'block', blockType: BlockType.GRASS, count: 64 };
+    this.slots[8] = { type: 'block', blockType: BlockType.STONE, count: 64 };
     // 背包 (第二行起)
     this.slots[9] = { type: 'weapon', weaponType: WeaponType.AXE, count: 1 };
     this.slots[10] = { type: 'weapon', weaponType: WeaponType.PICKAXE, count: 1 };
     this.slots[11] = { type: 'weapon', weaponType: WeaponType.RIFLE, count: 1 };
-    this.slots[12] = { type: 'block', blockType: BlockType.DIRT, count: 64 };
+    this.slots[12] = { type: 'block', blockType: BlockType.WOOD, count: 64 };
+    this.slots[13] = { type: 'block', blockType: BlockType.DIRT, count: 64 };
     this.slots[13] = { type: 'block', blockType: BlockType.SAND, count: 64 };
     this.slots[14] = { type: 'block', blockType: BlockType.LEAVES, count: 64 };
     this.slots[15] = { type: 'ammo', ammoType: 'pistol', count: 120 };
