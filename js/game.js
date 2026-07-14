@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=41';
-import { AnimalManager } from './animals.js?v=41';
+} from './voxel.js?v=42';
+import { AnimalManager } from './animals.js?v=42';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=41';
-import { audio } from './audio.js?v=41';
+} from './weapons.js?v=42';
+import { audio } from './audio.js?v=42';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -672,8 +672,8 @@ class TouchController {
             this.game.weaponManager.renderer.setScopeActive(false);
           }
         } else {
-          this.game._toggleScope(true);
-          if (this.game.weaponManager && this.game.weaponManager.renderer) {
+          this.game._toggleScope();
+          if (this.game.scopeLevel > 0 && this.game.weaponManager && this.game.weaponManager.renderer) {
             this.game.weaponManager.renderer.setScopeActive(true);
           }
         }
@@ -781,6 +781,7 @@ class Game {
     this.fps = 0;
 
     this.isAiming = false;
+    this.scopeLevel = 0; // 0=off, 1=1.5x, 2=3x
     this._rightMouseDown = false;
     this.baseFOV = 75;
 
@@ -1364,16 +1365,32 @@ class Game {
     if (!def || def.type !== 'ranged') return;
     if (on) {
       if (def.ammoType === 'sniper') {
-        // 狙击枪开倍镜
-        this.isAiming = true;
-        this.targetFov = this.fov * 0.27; // 约20度
-        this._showScopeOverlay(true);
+        // 狙击枪三段倍镜：0→1.5x→3x→off
+        if (this.scopeLevel === 0) {
+          this.scopeLevel = 1; // 1.5x
+          this.isAiming = true;
+          this.targetFov = this.fov / 1.5;
+          this._showScopeOverlay(true);
+        } else if (this.scopeLevel === 1) {
+          this.scopeLevel = 2; // 3x
+          this.isAiming = true;
+          this.targetFov = this.fov / 3;
+          this._showScopeOverlay(true);
+        } else {
+          // 3x → off
+          this.scopeLevel = 0;
+          this.isAiming = false;
+          this.targetFov = this.fov;
+          this._showScopeOverlay(false);
+        }
       } else {
         // 其他远程武器普通瞄准
         this.isAiming = true;
+        this.scopeLevel = 0;
         this.targetFov = this.fov * 0.67;
       }
     } else {
+      this.scopeLevel = 0;
       this.isAiming = false;
       this.targetFov = this.fov;
       this._showScopeOverlay(false);
@@ -1422,9 +1439,21 @@ class Game {
         cross.appendChild(vLine);
         cross.appendChild(dot);
         overlay.appendChild(cross);
+        // 倍率显示
+        const zoom = document.createElement('div');
+        zoom.id = 'scopeZoom';
+        zoom.style.cssText = `position:absolute;bottom:15%;left:50%;transform:translateX(-50%);color:#0f0;font-size:24px;font-weight:bold;text-shadow:0 0 4px #000;`;
+        overlay.appendChild(zoom);
         document.body.appendChild(overlay);
       } else {
         overlay.style.display = 'block';
+      }
+      // 更新倍率文字
+      const zoomEl = document.getElementById('scopeZoom');
+      if (zoomEl) {
+        const fov = this.scopeLevel === 2 ? 18 : 35;
+        const mag = Math.round(75 / fov * 10) / 10;
+        zoomEl.textContent = mag + 'x';
       }
       // 隐藏武器模型
       if (this.weaponManager && this.weaponManager.renderer && this.weaponManager.renderer.weaponGroup) {
@@ -1929,14 +1958,9 @@ class Game {
         if (currentItem && currentItem.type === 'weapon') {
           const wDef = WeaponDefs[currentItem.weaponType];
           if (wDef && wDef.type === 'ranged') {
-            // 远程武器：右键切换瞄准（再按关闭）
-            if (this.isAiming) {
-              this._toggleScope(false);
-              this.weaponManager.renderer.setScopeActive(false);
-            } else {
-              this._toggleScope(true);
-              this.weaponManager.renderer.setScopeActive(true);
-            }
+            // 远程武器：右键切换瞄准（循环：off→1.5x→3x→off）
+            this._toggleScope(true);
+            try { this.weaponManager.renderer.setScopeActive(this.isAiming); } catch(e) {}
           }
           // 手榴弹：右键按住显示抛物线，松开投掷
         } else {

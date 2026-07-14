@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=41';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=42';
 
 /* ============================================
    武器类型定义
@@ -253,12 +253,22 @@ class Bullet {
       }
     }
 
-    // 碰撞检测 - 生物
+    // 碰撞检测 - 生物（考虑机器人完整体型 + 射线检测防止快速子弹穿透）
     if (animalManager) {
+      const prevPos = this.mesh.position.clone().sub(moveVec);
       for (const animal of animalManager.animals) {
         if (!animal.alive) continue;
-        const dist = this.mesh.position.distanceTo(animal.position);
-        if (dist < 1.2) {
+        const h = animal.collisionHeight || 1.0;
+        const w = animal.collisionWidth || 0.7;
+        // 体型中心点在脚部上方 h/2 处
+        const center = new THREE.Vector3(animal.position.x, animal.position.y + h * 0.5, animal.position.z);
+        const hitRadius = Math.max(w, h * 0.5) + 0.15;
+        // 点到中心距离检测
+        const distNow = this.mesh.position.distanceTo(center);
+        const distPrev = prevPos.distanceTo(center);
+        // 检测本帧移动路径上是否有穿过球体（防止高速子弹穿透）
+        if (distNow < hitRadius || distPrev < hitRadius || 
+            (distNow !== distPrev && distNow < hitRadius + moveVec.length() && distPrev > distNow)) {
           animal.takeDamage(this.weaponDef.damage, { position: this.mesh.position.clone() }, !!this.weaponDef.auto);
           // 通知武器管理器
           if (this._weaponManager) {
