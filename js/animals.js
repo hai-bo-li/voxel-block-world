@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=50';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=50';
-import { audio } from './audio.js?v=50';
+import { BlockType, isSolid } from './voxel.js?v=51';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=51';
+import { audio } from './audio.js?v=51';
 
 /* ============================================
    常量配置
@@ -990,7 +990,7 @@ export class FlyerBot extends Robot {
     }
 
     if (this.attackTimer > 0) this.attackTimer -= dt;
-    this._updateHPBar();
+    this._updateHealthBar();
     this._updateFlash(dt);
     this._updateDeathParticles(dt);
   }
@@ -1077,7 +1077,7 @@ export class BruteBot extends Robot {
     }
     // 使用基类AI但更慢
     this._updateAI(dt, this.speed, this.attackRange, this.detectRange, this.attackCooldown);
-    this._updateHPBar();
+    this._updateHealthBar();
     this._updateFlash(dt);
     this._updateDeathParticles(dt);
   }
@@ -1162,7 +1162,7 @@ export class SpiderBot extends Robot {
     }
     // 快速AI
     this._updateAI(dt, this.speed, this.attackRange, this.detectRange, this.attackCooldown);
-    this._updateHPBar();
+    this._updateHealthBar();
     this._updateFlash(dt);
     this._updateDeathParticles(dt);
   }
