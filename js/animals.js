@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=31';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=31';
-import { audio } from './audio.js?v=31';
+import { BlockType, isSolid } from './voxel.js?v=32';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=32';
+import { audio } from './audio.js?v=32';
 
 /* ============================================
    常量配置
