@@ -4,17 +4,23 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=49';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=49';
-import { audio } from './audio.js?v=49';
+import { BlockType, isSolid } from './voxel.js?v=50';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=50';
+import { audio } from './audio.js?v=50';
 
 /* ============================================
    常量配置
    ============================================ */
-const SCOUT_COUNT = 5;
-const HEAVY_COUNT = 3;
+const SCOUT_COUNT = 4;
+const HEAVY_COUNT = 2;
+const FLYER_COUNT = 2;
+const BRUTE_COUNT = 2;
+const SPIDER_COUNT = 3;
 const MOBILE_SCOUT_COUNT = 2;
 const MOBILE_HEAVY_COUNT = 1;
+const MOBILE_FLYER_COUNT = 1;
+const MOBILE_BRUTE_COUNT = 1;
+const MOBILE_SPIDER_COUNT = 2;
 const SPAWN_RADIUS = 25;
 const MIN_SPAWN_DIST = 4;
 const WANDER_RANGE = 20;
@@ -642,6 +648,7 @@ class ScoutBot extends Robot {
     this.turnSpeed = 2.8;
     this.antennaAngle = 0;
 
+    this.robotType = 'scout';
     // 侦察机器人属性
     this.maxHP = 30;
     this.hp = 30;
@@ -739,6 +746,7 @@ class HeavyBot extends Robot {
     this.turnSpeed = 2.0;
     this.antennaAngle = 0;
 
+    this.robotType = 'heavy';
     // 重型机器人属性
     this.maxHP = 80;
     this.hp = 80;
@@ -868,6 +876,299 @@ class HeavyBot extends Robot {
 }
 
 /* ============================================
+   飞行机器人 FlyerBot - 空中追击+俯冲攻击
+   ============================================ */
+export class FlyerBot extends Robot {
+  constructor(scene, world, x, y, z) {
+    super(scene, world, x, y, z);
+    this.maxHP = 25;
+    this.hp = 25;
+    this.robotType = 'flyer';
+    this.speed = 5.5;
+    this.attackDamage = 4;
+    this.attackRange = 2.0;
+    this.detectRange = 28;
+    this.attackCooldown = 1.5;
+    this.hoverHeight = 5 + Math.random() * 3; // 5-8格高
+    this.divePhase = false;
+    this.diveTimer = 0;
+  }
+
+  _buildBody() {
+    const g = new THREE.Group();
+    // 中心球体 - 深紫色金属
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.3, 8, 8),
+      new THREE.MeshLambertMaterial({ color: 0x6a1b9a, emissive: 0x2a0a3a })
+    );
+    g.add(core);
+    // 四个螺旋桨叶片
+    const bladeMat = new THREE.MeshLambertMaterial({ color: 0x9ccc65, emissive: 0x2a4a1a });
+    const armMat = new THREE.MeshLambertMaterial({ color: 0x424242 });
+    const armPositions = [[0.35, 0, 0.35], [-0.35, 0, 0.35], [0.35, 0, -0.35], [-0.35, 0, -0.35]];
+    this._blades = [];
+    for (const [bx, by, bz] of armPositions) {
+      // 机械臂
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4), armMat);
+      arm.position.set(bx * 0.7, 0, bz * 0.7);
+      arm.rotation.z = Math.atan2(bz, bx) + Math.PI / 2;
+      arm.rotation.x = Math.PI / 2;
+      g.add(arm);
+      // 螺旋桨
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.05), bladeMat);
+      blade.position.set(bx, 0.1, bz);
+      g.add(blade);
+      this._blades.push(blade);
+    }
+    // 发光眼睛
+    const eye = new THREE.Mesh(
+      new THREE.SphereGeometry(0.08, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xff00ff })
+    );
+    eye.position.set(0, 0, 0.3);
+    g.add(eye);
+    this._eye = eye;
+    return g;
+  }
+
+  update(dt) {
+    if (!this.alive) return;
+    const p = this.targetPlayer;
+    if (!p) return;
+    const dx = p.position.x - this.position.x;
+    const dz = p.position.z - this.position.z;
+    const dy = p.position.y - this.position.y;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    // 旋转螺旋桨
+    if (this._blades) {
+      for (const b of this._blades) b.rotation.y += dt * 30;
+    }
+    // 眼睛闪烁
+    if (this._eye) {
+      this._eye.material.color.setHSL(0.83, 1, 0.5 + Math.sin(performance.now() * 0.005) * 0.2);
+    }
+
+    if (dist < this.detectRange) {
+      this.state = 'chase';
+      // 飞行移动 - 保持高度，水平追击玩家
+      const hoverTarget = p.position.y + this.hoverHeight;
+      const targetY = this.divePhase ? p.position.y + 1 : hoverTarget;
+
+      if (!this.divePhase && dist < 8 && Math.abs(dy) < 6) {
+        // 俯冲攻击
+        this.divePhase = true;
+        this.diveTimer = 0.8;
+      }
+      if (this.divePhase) {
+        this.diveTimer -= dt;
+        if (this.diveTimer <= 0) {
+          this.divePhase = false;
+        }
+      }
+
+      const nx = dx / (dist + 0.01);
+      const nz = dz / (dist + 0.01);
+      this.group.position.x += nx * this.speed * dt;
+      this.group.position.z += nz * this.speed * dt;
+      // 平滑Y轴移动
+      const yDiff = targetY - this.group.position.y;
+      this.group.position.y += yDiff * (this.divePhase ? 6 : 2) * dt;
+
+      // 攻击
+      if (dist < this.attackRange) {
+        if (this.attackTimer <= 0) {
+          this._attack(p);
+          this.attackTimer = this.attackCooldown;
+          this.divePhase = false; // 攻击后拉起
+        }
+      }
+    } else {
+      this.state = 'idle';
+      // 悬停晃动
+      this.group.position.y += Math.sin(performance.now() * 0.002) * 0.02;
+    }
+
+    if (this.attackTimer > 0) this.attackTimer -= dt;
+    this._updateHPBar();
+    this._updateFlash(dt);
+    this._updateDeathParticles(dt);
+  }
+}
+
+/* ============================================
+   重型近战机器人 BruteBot - 高血量大体型慢速
+   ============================================ */
+export class BruteBot extends Robot {
+  constructor(scene, world, x, y, z) {
+    super(scene, world, x, y, z);
+    this.robotType = 'brute';
+    this.maxHP = 120;
+    this.hp = 120;
+    this.speed = 2.0;
+    this.attackDamage = 12;
+    this.attackRange = 2.8;
+    this.detectRange = 20;
+    this.attackCooldown = 1.8;
+    this.height = 1.6;
+  }
+
+  _buildBody() {
+    const g = new THREE.Group();
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4e342e, emissive: 0x1a0a05 });
+    const accentMat = new THREE.MeshLambertMaterial({ color: 0xff5722, emissive: 0x4a1500 });
+    // 大型躯干
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.0, 0.7), bodyMat);
+    torso.position.y = 0.8;
+    g.add(torso);
+    // 肩膀护甲
+    const shoulderL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), accentMat);
+    shoulderL.position.set(-0.6, 1.1, 0);
+    g.add(shoulderL);
+    const shoulderR = shoulderL.clone();
+    shoulderR.position.x = 0.6;
+    g.add(shoulderR);
+    // 大头
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.45, 0.5), bodyMat);
+    head.position.y = 1.55;
+    g.add(head);
+    // 红色独眼
+    const eye = new THREE.Mesh(
+      new THREE.BoxGeometry(0.25, 0.1, 0.05),
+      new THREE.MeshBasicMaterial({ color: 0xff1744 })
+    );
+    eye.position.set(0, 1.6, 0.26);
+    g.add(eye);
+    this._eye = eye;
+    // 粗壮腿
+    const legMat = new THREE.MeshLambertMaterial({ color: 0x3e2723 });
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.6, 0.3), legMat);
+    legL.position.set(-0.25, 0.3, 0);
+    g.add(legL);
+    const legR = legL.clone();
+    legR.position.x = 0.25;
+    g.add(legR);
+    // 大拳头
+    const fistL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), accentMat);
+    fistL.position.set(-0.65, 0.55, 0);
+    g.add(fistL);
+    const fistR = fistL.clone();
+    fistR.position.x = 0.65;
+    g.add(fistR);
+    this._fistL = fistL;
+    this._fistR = fistR;
+    return g;
+  }
+
+  update(dt) {
+    if (!this.alive) return;
+    // 眼睛闪烁
+    if (this._eye) {
+      this._eye.material.color.setHSL(0, 1, 0.4 + Math.sin(performance.now() * 0.003) * 0.2);
+    }
+    // 拳头挥动动画（攻击时）
+    if (this._fistL && this.attackTimer > this.attackCooldown - 0.3) {
+      const swing = Math.sin((this.attackCooldown - this.attackTimer) * 10) * 0.3;
+      this._fistL.rotation.x = swing;
+      this._fistR.rotation.x = -swing;
+    } else {
+      if (this._fistL) this._fistL.rotation.x = 0;
+      if (this._fistR) this._fistR.rotation.x = 0;
+    }
+    // 使用基类AI但更慢
+    this._updateAI(dt, this.speed, this.attackRange, this.detectRange, this.attackCooldown);
+    this._updateHPBar();
+    this._updateFlash(dt);
+    this._updateDeathParticles(dt);
+  }
+
+  _attack(p) {
+    super._attack(p);
+    // 超强击退
+    if (p.takeDamage) {
+      const dx = p.position.x - this.position.x;
+      const dz = p.position.z - this.position.z;
+      const len = Math.sqrt(dx * dx + dz * dz) + 0.01;
+      p.knockbackVel.x += (dx / len) * 8;
+      p.knockbackVel.z += (dz / len) * 8;
+      p.velocity.y = Math.max(p.velocity.y, 6); // 击飞
+    }
+  }
+}
+
+/* ============================================
+   蜘蛛机器人 SpiderBot - 快速小型群体出没
+   ============================================ */
+export class SpiderBot extends Robot {
+  constructor(scene, world, x, y, z) {
+    super(scene, world, x, y, z);
+    this.robotType = 'spider';
+    this.maxHP = 15;
+    this.hp = 15;
+    this.speed = 7.0;
+    this.attackDamage = 3;
+    this.attackRange = 1.5;
+    this.detectRange = 22;
+    this.attackCooldown = 0.8;
+    this.height = 0.5;
+    this._legPhase = 0;
+  }
+
+  _buildBody() {
+    const g = new THREE.Group();
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x1b5e20, emissive: 0x0a2a0a });
+    // 小型圆身体
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6), bodyMat);
+    body.position.y = 0.35;
+    g.add(body);
+    // 头部
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 6, 6), bodyMat);
+    head.position.set(0, 0.35, 0.22);
+    g.add(head);
+    // 4只红色眼睛
+    for (let i = 0; i < 4; i++) {
+      const eye = new THREE.Mesh(
+        new THREE.SphereGeometry(0.03, 4, 4),
+        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+      );
+      eye.position.set(-0.08 + i * 0.05, 0.38, 0.32);
+      g.add(eye);
+    }
+    // 8条腿
+    const legMat = new THREE.MeshLambertMaterial({ color: 0x2e7d32 });
+    this._legs = [];
+    const legPositions = [
+      [-0.2, 0.15], [-0.25, 0.08], [-0.25, -0.08], [-0.2, -0.15],
+      [0.2, 0.15], [0.25, 0.08], [0.25, -0.08], [0.2, -0.15]
+    ];
+    for (const [lx, lz] of legPositions) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.4), legMat);
+      leg.position.set(lx, 0.2, lz);
+      leg.rotation.z = lx > 0 ? 0.5 : -0.5;
+      g.add(leg);
+      this._legs.push(leg);
+    }
+    return g;
+  }
+
+  update(dt) {
+    if (!this.alive) return;
+    // 腿部动画
+    this._legPhase += dt * 15;
+    if (this._legs) {
+      this._legs.forEach((leg, i) => {
+        leg.rotation.x = Math.sin(this._legPhase + i * 0.8) * 0.3;
+      });
+    }
+    // 快速AI
+    this._updateAI(dt, this.speed, this.attackRange, this.detectRange, this.attackCooldown);
+    this._updateHPBar();
+    this._updateFlash(dt);
+    this._updateDeathParticles(dt);
+  }
+}
+
+/* ============================================
    机器人生成管理器
    ============================================ */
 export class AnimalManager {
@@ -901,6 +1202,9 @@ export class AnimalManager {
 
     const scoutCount = this.isMobile ? MOBILE_SCOUT_COUNT : SCOUT_COUNT;
     const heavyCount = this.isMobile ? MOBILE_HEAVY_COUNT : HEAVY_COUNT;
+    const flyerCount = this.isMobile ? MOBILE_FLYER_COUNT : FLYER_COUNT;
+    const bruteCount = this.isMobile ? MOBILE_BRUTE_COUNT : BRUTE_COUNT;
+    const spiderCount = this.isMobile ? MOBILE_SPIDER_COUNT : SPIDER_COUNT;
     const usedPositions = [];
 
     const trySpawn = (type) => {
@@ -930,8 +1234,14 @@ export class AnimalManager {
         let robot;
         if (type === 'scout') {
           robot = new ScoutBot(this.scene, this.world, sx, gy, sz);
-        } else {
+        } else if (type === 'heavy') {
           robot = new HeavyBot(this.scene, this.world, sx, gy, sz);
+        } else if (type === 'flyer') {
+          robot = new FlyerBot(this.scene, this.world, sx, gy + 6, sz);
+        } else if (type === 'brute') {
+          robot = new BruteBot(this.scene, this.world, sx, gy, sz);
+        } else {
+          robot = new SpiderBot(this.scene, this.world, sx, gy, sz);
         }
         robot.targetPlayer = this._player || null;
         this.robots.push(robot);
@@ -941,6 +1251,9 @@ export class AnimalManager {
 
     for (let i = 0; i < heavyCount; i++) trySpawn('heavy');
     for (let i = 0; i < scoutCount; i++) trySpawn('scout');
+    for (let i = 0; i < flyerCount; i++) trySpawn('flyer');
+    for (let i = 0; i < bruteCount; i++) trySpawn('brute');
+    for (let i = 0; i < spiderCount; i++) trySpawn('spider');
   }
 
   _getGroundY(wx, wz) {
@@ -1007,6 +1320,12 @@ export class AnimalManager {
       let robot;
       if (type === 'heavy') {
         robot = new HeavyBot(this.scene, this.world, sx, gy, sz);
+      } else if (type === 'flyer') {
+        robot = new FlyerBot(this.scene, this.world, sx, gy + 6, sz);
+      } else if (type === 'brute') {
+        robot = new BruteBot(this.scene, this.world, sx, gy, sz);
+      } else if (type === 'spider') {
+        robot = new SpiderBot(this.scene, this.world, sx, gy, sz);
       } else {
         robot = new ScoutBot(this.scene, this.world, sx, gy, sz);
       }

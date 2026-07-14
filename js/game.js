@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=49';
-import { AnimalManager } from './animals.js?v=49';
+} from './voxel.js?v=50';
+import { AnimalManager } from './animals.js?v=50';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=49';
-import { audio } from './audio.js?v=49';
+} from './weapons.js?v=50';
+import { audio } from './audio.js?v=50';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1026,7 +1026,8 @@ class Game {
       this._showHitMarker();
     };
     this.weaponManager.onEnemyKill = (animal) => {
-      const name = animal.robotType === 'heavy' ? '重型机器人' : '侦察机器人';
+      const names = { scout: '侦察机器人', heavy: '重型机器人', flyer: '飞行机器人', brute: '蛮力机器人', spider: '蜘蛛机器人' };
+      const name = names[animal.robotType] || '未知机器人';
       this._showKillFeed(name);
       this.waveKills++;
       this.totalKills++;
