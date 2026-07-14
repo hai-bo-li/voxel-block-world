@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=26';
-import { AnimalManager } from './animals.js?v=26';
+} from './voxel.js?v=27';
+import { AnimalManager } from './animals.js?v=27';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=26';
-import { audio } from './audio.js?v=26';
+} from './weapons.js?v=27';
+import { audio } from './audio.js?v=27';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -626,11 +626,16 @@ class TouchController {
           }, 300);
         } else {
           this.game._weaponAttack();
+          // 自动武器：长按持续射击
+          if (wDef && wDef.auto) {
+            this.game._isFiring = true;
+          }
         }
         _flashBtn(btnAttack);
       });
       btnAttack.addEventListener('pointerup', (e) => {
         e.preventDefault();
+        this.game._isFiring = false;
         if (_attackHoldTimer === 'scoped') {
           this.game._weaponAttack();
           this.game._toggleScope(false);
@@ -641,11 +646,13 @@ class TouchController {
         _attackHoldTimer = null;
       });
       btnAttack.addEventListener('pointercancel', (e) => {
+        this.game._isFiring = false;
         if (_attackHoldTimer && _attackHoldTimer !== 'scoped') clearTimeout(_attackHoldTimer);
         if (_attackHoldTimer === 'scoped') this.game._toggleScope(false);
         _attackHoldTimer = null;
       });
       btnAttack.addEventListener('pointerleave', (e) => {
+        this.game._isFiring = false;
         if (_attackHoldTimer && _attackHoldTimer !== 'scoped') clearTimeout(_attackHoldTimer);
         if (_attackHoldTimer === 'scoped') this.game._toggleScope(false);
         _attackHoldTimer = null;
@@ -757,6 +764,9 @@ class Game {
 
     // 命中标记
     this._hitMarkerTimer = 0;
+
+    // 自动射击标志（长按左键持续射击）
+    this._isFiring = false;
 
     // 设置参数（灵敏度、晃动、平滑度）
     this.mouseSensitivity = 0.002;
@@ -1003,10 +1013,21 @@ class Game {
       }
     };
 
-    // 射击后坐力（相机抖动）
+    // 射击后坐力（相机抖动 + 玩家物理后退）
     this.weaponManager.onShootRecoil = (recoilAmount) => {
       this.player.pitch += recoilAmount * 0.3;
       this.player.yaw += (Math.random() - 0.5) * recoilAmount * 0.15;
+
+      // 物理后坐力：推动玩家后退
+      const wType = this.weaponManager.currentWeapon;
+      const wDef = WeaponDefs[wType];
+      if (wDef && wDef.pushback) {
+        const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.camera.quaternion);
+        this.player.velocity.x -= dir.x * wDef.pushback * 3;
+        this.player.velocity.z -= dir.z * wDef.pushback * 3;
+        // 轻微上仰
+        this.player.velocity.y += wDef.pushback * 0.8;
+      }
     };
   }
 
@@ -1803,6 +1824,7 @@ class Game {
       if (e.button === 0) {
         if (currentItem && currentItem.type === 'weapon') {
           this._weaponAttack();
+          this._isFiring = true;
         } else {
           this.player.placeBlock();
           this.weaponManager.triggerPlace();
@@ -1820,8 +1842,11 @@ class Game {
       }
     });
 
-    // 鼠标释放：停止瞄准
+    // 鼠标释放：停止瞄准 + 停止自动射击
     document.addEventListener('mouseup', (e) => {
+      if (e.button === 0) {
+        this._isFiring = false;
+      }
       if (e.button === 2 && this.isAiming) {
         this._toggleScope(false);
         this.weaponManager.renderer.setScopeActive(false);
@@ -2204,6 +2229,17 @@ class Game {
       if (this.weaponManager) {
         const isMoving = this.player.keys['KeyW'] || this.player.keys['KeyA'] || this.player.keys['KeyS'] || this.player.keys['KeyD'];
         this.weaponManager.update(dt, isMoving, this.bobIntensity);
+
+        // 自动射击：长按左键时，如果当前武器是 auto 类型则持续射击
+        if (this._isFiring) {
+          const currentItem = this.inventory.getCurrentItem();
+          if (currentItem && currentItem.type === 'weapon') {
+            const wDef = WeaponDefs[currentItem.weaponType];
+            if (wDef && wDef.auto) {
+              this._weaponAttack();
+            }
+          }
+        }
 
         // 脚步声
         if (isMoving && this.player.onGround) {

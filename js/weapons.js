@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=26';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT } from './voxel.js?v=27';
 
 /* ============================================
    武器类型定义
@@ -74,6 +74,7 @@ export const WeaponDefs = {
     ammoType: 'pistol',
     spread: 0.01,
     bodyColor: 0x546E7A,
+    pushback: 0.5,
   },
   [WeaponType.SMG]: {
     name: '冲锋枪',
@@ -91,6 +92,8 @@ export const WeaponDefs = {
     ammoType: 'smg',
     spread: 0.04,
     bodyColor: 0x455A64,
+    auto: true,
+    pushback: 0.3,
   },
   [WeaponType.SNIPER]: {
     name: '狙击枪',
@@ -108,6 +111,7 @@ export const WeaponDefs = {
     ammoType: 'sniper',
     spread: 0.002,
     bodyColor: 0x263238,
+    pushback: 1.5,
   },
   [WeaponType.RIFLE]: {
     name: '等离子步枪',
@@ -125,6 +129,8 @@ export const WeaponDefs = {
     ammoType: 'rifle',
     spread: 0.02,
     bodyColor: 0x37474F,
+    auto: true,
+    pushback: 0.5,
   },
   [WeaponType.SHOTGUN]: {
     name: '霰弹枪',
@@ -143,6 +149,7 @@ export const WeaponDefs = {
     pellets: 5,
     spread: 0.08,
     bodyColor: 0x4E342E,
+    pushback: 2.0,
   },
 };
 
@@ -716,6 +723,9 @@ export class WeaponManager {
     this.isReloading = false;
     this.reloadTimer = 0;
     this.reloadDuration = 0;
+
+    // 连续射击（自动武器）
+    this.isFiring = false;   // 左键是否按住
     this.reloadingWeaponType = null;
 
     // 初始化弹匣
@@ -823,6 +833,11 @@ export class WeaponManager {
     this.onAmmoChanged?.();
   }
 
+  /** 放置方块时触发手部动画 */
+  triggerPlace() {
+    this.renderer.triggerPlace();
+  }
+
   /** 执行攻击（左键） */
   attack(playerYaw, playerPitch) {
     if (this.cooldownTimer > 0) return false;
@@ -843,6 +858,7 @@ export class WeaponManager {
   /** 近战攻击 */
   _meleeAttack(def, yaw, pitch) {
     this.renderer.triggerSwing();
+    if (this.onRecoil) this.onRecoil(def.recoil);
 
     const dir = new THREE.Vector3(
       -Math.sin(yaw) * Math.cos(pitch),
