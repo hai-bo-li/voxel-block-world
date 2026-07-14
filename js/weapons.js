@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=29';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=30';
 
 /* ============================================
    武器类型定义
@@ -84,9 +84,9 @@ export const WeaponDefs = {
     cooldown: 0.1,
     blockDamage: 1,
     bulletSpeed: 100,
-    bulletColor: 0x76FF03,
+    bulletColor: 0x55cc00,
     bulletSize: 0.04,
-    recoil: 0.005,
+    recoil: 0.003,
     magSize: 40,
     reloadTime: 1.8,
     ammoType: 'smg',
@@ -246,7 +246,7 @@ class Bullet {
         if (!animal.alive) continue;
         const dist = this.mesh.position.distanceTo(animal.position);
         if (dist < 1.2) {
-          animal.takeDamage(this.weaponDef.damage, { position: this.mesh.position.clone() });
+          animal.takeDamage(this.weaponDef.damage, { position: this.mesh.position.clone() }, !!this.weaponDef.auto);
           // 通知武器管理器
           if (this._weaponManager) {
             this._weaponManager._onAnimalHit(animal);
@@ -360,10 +360,11 @@ function _getBlockParticleColor(blockType) {
 /* ============================================
    受击特效工具
    ============================================ */
-export function spawnHitEffect(scene, position, color) {
+export function spawnHitEffect(scene, position, color, isAuto = false) {
   // 受击粒子爆炸
-  for (let i = 0; i < 8; i++) {
-    const size = 0.06 + Math.random() * 0.08;
+  const count = isAuto ? 3 : 8;
+  for (let i = 0; i < count; i++) {
+    const size = isAuto ? (0.04 + Math.random() * 0.04) : (0.06 + Math.random() * 0.08);
     const geo = new THREE.BoxGeometry(size, size, size);
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
     const particle = new THREE.Mesh(geo, mat);
@@ -909,7 +910,7 @@ export class WeaponManager {
           if (!animal.alive) continue;
           const dist = hitPos.distanceTo(animal.position);
           if (dist < 1.2) {
-            animal.takeDamage(def.damage, { position: this.camera.position.clone() });
+            animal.takeDamage(def.damage, { position: this.camera.position.clone() }, !!def.auto);
             this.onEnemyHit?.(animal);
             if (!animal.alive) this.onEnemyKill?.(animal);
             return true;

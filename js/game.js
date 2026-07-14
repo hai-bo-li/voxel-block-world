@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=29';
-import { AnimalManager } from './animals.js?v=29';
+} from './voxel.js?v=30';
+import { AnimalManager } from './animals.js?v=30';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=29';
-import { audio } from './audio.js?v=29';
+} from './weapons.js?v=30';
+import { audio } from './audio.js?v=30';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -155,13 +155,13 @@ class Player {
       const kbMove = this.knockbackVel.clone().multiplyScalar(dt);
       // X轴
       this.position.x += kbMove.x;
-      this._resolveCollision('x');
+      this._resolveCollision('x', this.knockbackVel.x);
       // Z轴
       this.position.z += kbMove.z;
-      this._resolveCollision('z');
+      this._resolveCollision('z', this.knockbackVel.z);
       // Y轴
       this.position.y += kbMove.y;
-      this._resolveCollision('y');
+      this._resolveCollision('y', this.knockbackVel.y);
       this.knockbackVel.multiplyScalar(0.85);
       if (this.knockbackVel.lengthSq() < 0.01) {
         this.knockbackVel.set(0, 0, 0);
@@ -274,7 +274,7 @@ class Player {
     this._raycast();
   }
 
-  _resolveCollision(axis) {
+  _resolveCollision(axis, dirOverride) {
     const halfW = this.width / 2;
     const min = new THREE.Vector3(
       this.position.x - halfW, this.position.y, this.position.z - halfW
@@ -322,14 +322,16 @@ class Player {
               min.z < blockMax.z && max.z > blockMin.z) {
 
             if (axis === 'x') {
-              if (this.velocity.x > 0) {
+              const dirX = dirOverride !== undefined ? dirOverride : this.velocity.x;
+              if (dirX > 0) {
                 this.position.x = blockMin.x - halfW;
               } else {
                 this.position.x = blockMax.x + halfW;
               }
               this.velocity.x = 0;
             } else if (axis === 'y') {
-              if (this.velocity.y > 0) {
+              const dirY = dirOverride !== undefined ? dirOverride : this.velocity.y;
+              if (dirY > 0) {
                 this.position.y = blockMin.y - this.height;
               } else {
                 this.position.y = blockMax.y;
@@ -337,7 +339,8 @@ class Player {
               }
               this.velocity.y = 0;
             } else if (axis === 'z') {
-              if (this.velocity.z > 0) {
+              const dirZ = dirOverride !== undefined ? dirOverride : this.velocity.z;
+              if (dirZ > 0) {
                 this.position.z = blockMin.z - halfW;
               } else {
                 this.position.z = blockMax.z + halfW;
