@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=35';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=36';
 
 /* ============================================
    武器类型定义
@@ -415,17 +415,31 @@ class Grenade {
     this.scene = scene;
     this.alive = true;
     this.age = 0;
-    this.fuseTime = 2.5; // 2.5秒后爆炸
+    this.fuseTime = 2.5;
 
-    // 手榴弹模型
+    // 手榴弹模型 - 小球体+引线
+    const group = new THREE.Group();
     const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2E7D32 });
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), bodyMat);
-    body.position.copy(origin);
-    this.mesh = body;
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), bodyMat);
+    group.add(body);
+    // 引线
+    const fuseMat = new THREE.MeshBasicMaterial({ color: 0x8B6914 });
+    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.08, 4), fuseMat);
+    fuse.position.y = 0.12;
+    group.add(fuse);
+    // 引线头（火星）
+    const sparkMat = new THREE.MeshBasicMaterial({ color: 0xFF4400 });
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(0.02, 4, 4), sparkMat);
+    spark.position.y = 0.16;
+    spark.name = 'spark';
+    group.add(spark);
+
+    group.position.copy(origin);
+    this.mesh = group;
 
     // 投掷速度
     this.velocity = direction.clone().multiplyScalar(weaponDef.throwSpeed || 20);
-    this.velocity.y += 5; // 上抛弧线
+    this.velocity.y += 5;
 
     scene.add(this.mesh);
   }
@@ -449,6 +463,12 @@ class Grenade {
       this.velocity.z *= 0.7;
     }
 
+    // 引线火星闪烁
+    const spark = this.mesh.getObjectByName('spark');
+    if (spark) {
+      spark.visible = Math.sin(this.age * 30) > 0;
+    }
+
     this.age += dt;
     if (this.age >= this.fuseTime) {
       this.explode();
@@ -461,8 +481,10 @@ class Grenade {
 
     // 从场景移除手榴弹模型
     this.scene.remove(this.mesh);
-    if (this.mesh.geometry) this.mesh.geometry.dispose();
-    if (this.mesh.material) this.mesh.material.dispose();
+    this.mesh.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) child.material.dispose();
+    });
 
     // 爆炸粒子效果
     this._spawnExplosionParticles(pos);
@@ -494,40 +516,110 @@ class Grenade {
   }
 
   _spawnExplosionParticles(pos) {
-    const count = 30;
-    for (let i = 0; i < count; i++) {
-      const isFire = i < count * 0.6;
-      const color = isFire
-        ? (Math.random() > 0.5 ? 0xFF6D00 : 0xFFAB00)
-        : 0x555555;
-      const size = isFire
-        ? (0.08 + Math.random() * 0.12)
-        : (0.04 + Math.random() * 0.06);
+    // 火焰粒子
+    const fireCount = 15;
+    for (let i = 0; i < fireCount; i++) {
+      const color = Math.random() > 0.5 ? 0xFF6D00 : 0xFFAB00;
+      const size = 0.06 + Math.random() * 0.08;
       const geo = new THREE.BoxGeometry(size, size, size);
       const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
       const particle = new THREE.Mesh(geo, mat);
       particle.position.copy(pos);
 
-      const speed = isFire ? 8 : 5;
+      const speed = 6;
       const vel = new THREE.Vector3(
         (Math.random() - 0.5) * speed,
-        Math.random() * speed * 0.8 + 2,
+        Math.random() * speed * 0.6 + 2,
         (Math.random() - 0.5) * speed
       );
       particle._vel = vel;
-      particle._life = 0.4 + Math.random() * 0.6;
+      particle._life = 0.3 + Math.random() * 0.5;
 
       this.scene.add(particle);
       if (!this.scene._particles) this.scene._particles = [];
       this.scene._particles.push(particle);
     }
+    // 烟雾粒子
+    const smokeCount = 8;
+    for (let i = 0; i < smokeCount; i++) {
+      const size = 0.04 + Math.random() * 0.05;
+      const geo = new THREE.BoxGeometry(size, size, size);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.8 });
+      const particle = new THREE.Mesh(geo, mat);
+      particle.position.copy(pos);
+
+      const speed = 3;
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * speed,
+        Math.random() * speed * 0.5 + 1.5,
+        (Math.random() - 0.5) * speed
+      );
+      particle._vel = vel;
+      particle._life = 0.5 + Math.random() * 0.8;
+
+      this.scene.add(particle);
+      if (!this.scene._particles) this.scene._particles.push(particle);
+    }
   }
 
   _destroyBlocks(center, radius) {
-    // 通过weaponManager回调通知game.js破坏方块
     if (this._weaponManager) {
       this._weaponManager.onBlockExplode?.(center, radius, this.weaponDef.blockDamage || 5);
     }
+  }
+}
+
+/** 手榴弹轨迹预测线 */
+export class GrenadeTrajectory {
+  constructor(scene) {
+    this.scene = scene;
+    this.line = null;
+    this.points = [];
+    this.maxPoints = 30;
+  }
+
+  /** 计算并显示抛物线 */
+  show(origin, direction, throwSpeed) {
+    this.hide();
+
+    const vel = direction.clone().multiplyScalar(throwSpeed || 20);
+    vel.y += 5;
+    const gravity = new THREE.Vector3(0, -20, 0);
+    const dt = 0.05;
+    const pos = origin.clone();
+    const curVel = vel.clone();
+
+    this.points = [];
+    for (let i = 0; i < this.maxPoints; i++) {
+      this.points.push(pos.clone());
+      curVel.add(gravity.clone().multiplyScalar(dt));
+      pos.add(curVel.clone().multiplyScalar(dt));
+      if (pos.y < 0) break;
+    }
+
+    if (this.points.length < 2) return;
+
+    const geo = new THREE.BufferGeometry().setFromPoints(this.points);
+    const mat = new THREE.LineDashedMaterial({
+      color: 0x00ff88,
+      dashSize: 0.3,
+      gapSize: 0.15,
+      transparent: true,
+      opacity: 0.6,
+    });
+    this.line = new THREE.Line(geo, mat);
+    this.line.computeLineDistances();
+    this.scene.add(this.line);
+  }
+
+  hide() {
+    if (this.line) {
+      this.scene.remove(this.line);
+      if (this.line.geometry) this.line.geometry.dispose();
+      if (this.line.material) this.line.material.dispose();
+      this.line = null;
+    }
+    this.points = [];
   }
 }
 

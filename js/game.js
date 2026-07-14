@@ -8,13 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=35';
-import { AnimalManager } from './animals.js?v=35';
+} from './voxel.js?v=36';
+import { AnimalManager } from './animals.js?v=36';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=35';
-import { audio } from './audio.js?v=35';
+  GrenadeTrajectory,
+} from './weapons.js?v=36';
+import { audio } from './audio.js?v=36';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -978,6 +979,7 @@ class Game {
   _initWeaponSystem() {
     this.weaponManager = new WeaponManager(this.scene, this.camera, this.world, this.animalManager);
     this.inventoryUI = new InventoryUI(this.inventory);
+    this.grenadeTrajectory = new GrenadeTrajectory(this.scene);
 
     // 换弹进度回调
     this.weaponManager.onReloadProgress = (progress) => {
@@ -1061,11 +1063,12 @@ class Game {
       if (!this.animalManager) return;
       for (const robot of this.animalManager.robots) {
         if (!robot.alive) continue;
-        const dist = center.distanceTo(robot.mesh.position);
+        const pos = robot.group ? robot.group.position : robot.position;
+        const dist = center.distanceTo(pos);
         if (dist <= radius) {
           const dmg = Math.round(damage * (1 - dist / radius));
           if (dmg > 0) {
-            robot.takeDamage(dmg, center, true);
+            robot.takeDamage(dmg, { position: center }, true);
             this._showHitMarker();
           }
         }
@@ -2337,6 +2340,18 @@ class Game {
             if (wDef && wDef.auto) {
               this._weaponAttack();
             }
+          }
+        }
+
+        // 手榴弹抛物线轨迹
+        if (this.grenadeTrajectory) {
+          const currentItem = this.inventory.getCurrentItem();
+          if (currentItem && currentItem.weaponType === WeaponType.GRENADE) {
+            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+            const wDef = WeaponDefs[WeaponType.GRENADE];
+            this.grenadeTrajectory.show(this.camera.position.clone(), dir, wDef.throwSpeed || 20);
+          } else {
+            this.grenadeTrajectory.hide();
           }
         }
 
