@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=44';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=45';
 
 /* ============================================
    武器类型定义
@@ -157,7 +157,7 @@ export const WeaponDefs = {
     type: 'grenade',
     damage: 30,
     range: 30,
-    cooldown: 1.5,
+    cooldown: 0.6,
     blockDamage: 5,
     blastRadius: 5,
     throwSpeed: 20,

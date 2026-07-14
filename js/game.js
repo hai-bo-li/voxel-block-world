@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=44';
-import { AnimalManager } from './animals.js?v=44';
+} from './voxel.js?v=45';
+import { AnimalManager } from './animals.js?v=45';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=44';
-import { audio } from './audio.js?v=44';
+} from './weapons.js?v=45';
+import { audio } from './audio.js?v=45';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
