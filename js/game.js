@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=73';
-import { AnimalManager } from './animals.js?v=73';
+} from './voxel.js?v=74';
+import { AnimalManager } from './animals.js?v=74';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=73';
-import { audio } from './audio.js?v=73';
+} from './weapons.js?v=74';
+import { audio } from './audio.js?v=74';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1203,7 +1203,9 @@ class Game {
       for (const robot of this.animalManager.robots) {
         if (!robot.alive) continue;
         const pos = robot.group ? robot.group.position : robot.position;
-        const dist = center.distanceTo(pos);
+        const dx = pos.x - center.x;
+        const dz = pos.z - center.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
         if (dist <= radius) {
           const dmg = Math.round(damage * (1 - dist / radius));
           if (dmg > 0) {
