@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=60';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=61';
 
 /* ============================================
    武器类型定义
@@ -1016,12 +1016,8 @@ export class WeaponRenderer {
       this.placePhase = Math.max(0, this.placePhase - dt * 6);
     }
 
-    // 换弹动画进度递减
-    if (this.isReloading) {
-      this.reloadAnim = Math.min(1, this.reloadAnim + dt * 2.5);
-    } else {
-      this.reloadAnim = Math.max(0, this.reloadAnim - dt * 4);
-    }
+    // 换弹动画进度由 WeaponManager 直接驱动（reloadAnim = reloadProgress）
+    // 非换弹时 reloadAnim 已被设为 0，无需自行递减
 
     // 增强的挥砍动画 - 剑类武器大幅度横劈
     const isSword = this.currentWeapon === WeaponType.SWORD;
@@ -1567,8 +1563,9 @@ export class WeaponManager {
       }
     }
 
-    // 同步换弹状态到渲染器
+    // 同步换弹状态和进度到渲染器
     this.renderer.isReloading = this.isReloading;
+    this.renderer.reloadAnim = this.isReloading ? this.getReloadProgress() : 0;
 
     // 更新武器渲染
     this.renderer.update(dt, isMoving, bobIntensity || 1.0);
