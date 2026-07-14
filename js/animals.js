@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=55';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=55';
-import { audio } from './audio.js?v=55';
+import { BlockType, isSolid } from './voxel.js?v=56';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=56';
+import { audio } from './audio.js?v=56';
 
 /* ============================================
    常量配置
@@ -30,7 +30,8 @@ const DETECTION_RANGE = 25;        // 检测玩家的距离
 const ATTACK_RANGE_MELEE = 2.0;    // 近战攻击距离
 const ATTACK_RANGE_RANGED = 20;    // 远程攻击距离
 const CHASE_SPEED_MULT = 1.5;      // 追击速度倍率（降低）
-const MODEL_FACING_OFFSET = Math.PI / 2; // 模型默认朝 +Z，atan2 返回 +X 方向，需偏移 90°
+// 模型默认朝 +Z；Three.js Y 旋转 θ 使 +Z 朝向 (sinθ, cosθ)
+// 因此朝向 (dx,dz) 的旋转角 = atan2(dx, dz)（dx 在前, dz 在后）
 const ATTACK_COOLDOWN_MELEE = 1.2; // 近战冷却
 const ATTACK_COOLDOWN_RANGED = 2.0;// 远程冷却
 const DAMAGE_MELEE_SCOUT = 3;      // 侦察机器人近战伤害
@@ -458,7 +459,7 @@ class Robot {
       this.state = 'wander';
       this.stateTimer = randRange(2, 5);
       this.wanderDir.set(
-        Math.cos(this.targetRotation - MODEL_FACING_OFFSET), 0, Math.sin(this.targetRotation - MODEL_FACING_OFFSET)
+        Math.sin(this.targetRotation), 0, Math.cos(this.targetRotation)
       ).normalize();
     }
   }
@@ -477,16 +478,16 @@ class Robot {
       this.position.x = nx;
       this.position.z = nz;
       this.position.y = ny;
-      this.targetRotation = Math.atan2(this.wanderDir.z, this.wanderDir.x) + MODEL_FACING_OFFSET;
+      this.targetRotation = Math.atan2(this.wanderDir.x, this.wanderDir.z);
     } else {
       this.targetRotation += randRange(Math.PI * 0.4, Math.PI * 0.8) * (Math.random() > 0.5 ? 1 : -1);
-      this.wanderDir.set(Math.cos(this.targetRotation - MODEL_FACING_OFFSET), 0, Math.sin(this.targetRotation - MODEL_FACING_OFFSET)).normalize();
+      this.wanderDir.set(Math.sin(this.targetRotation), 0, Math.cos(this.targetRotation)).normalize();
       this.stateTimer = Math.max(this.stateTimer, 0.5);
     }
 
     if (Math.random() < dt * 0.3) {
       this.targetRotation += randRange(-0.8, 0.8);
-      this.wanderDir.set(Math.cos(this.targetRotation - MODEL_FACING_OFFSET), 0, Math.sin(this.targetRotation - MODEL_FACING_OFFSET)).normalize();
+      this.wanderDir.set(Math.sin(this.targetRotation), 0, Math.cos(this.targetRotation)).normalize();
     }
 
     if (this.stateTimer <= 0) {
@@ -504,7 +505,7 @@ class Robot {
       this.state = 'wander';
       this.stateTimer = randRange(2, 4);
       this.wanderDir.set(
-        Math.cos(this.targetRotation - MODEL_FACING_OFFSET), 0, Math.sin(this.targetRotation - MODEL_FACING_OFFSET)
+        Math.sin(this.targetRotation), 0, Math.cos(this.targetRotation)
       ).normalize();
       return;
     }
@@ -531,7 +532,7 @@ class Robot {
     }
 
     // 面朝玩家
-    this.targetRotation = Math.atan2(dirToPlayer.z, dirToPlayer.x) + MODEL_FACING_OFFSET;
+    this.targetRotation = Math.atan2(dirToPlayer.x, dirToPlayer.z);
 
     // 追击超时回到巡逻
     if (this.stateTimer <= 0) {
@@ -553,7 +554,7 @@ class Robot {
 
     // 面朝玩家
     const dirToPlayer = this._getDirToPlayer();
-    this.targetRotation = Math.atan2(dirToPlayer.z, dirToPlayer.x) + MODEL_FACING_OFFSET;
+    this.targetRotation = Math.atan2(dirToPlayer.x, dirToPlayer.z);
 
     // 执行攻击
     if (this.attackCooldown <= 0 && this.targetPlayer) {
@@ -1058,7 +1059,7 @@ export class FlyerBot extends Robot {
     }
 
     // 面朝玩家方向（模型朝 +Z，需偏移）
-    this.targetRotation = Math.atan2(dz, dx) + MODEL_FACING_OFFSET;
+    this.targetRotation = Math.atan2(dx, dz);
     const rDiff = this.targetRotation - this.rotation;
     let shortDiff = ((rDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
     this.rotation += shortDiff * Math.min(3 * dt, 1);
