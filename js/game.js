@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=42';
-import { AnimalManager } from './animals.js?v=42';
+} from './voxel.js?v=43';
+import { AnimalManager } from './animals.js?v=43';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=42';
-import { audio } from './audio.js?v=42';
+} from './weapons.js?v=43';
+import { audio } from './audio.js?v=43';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -2435,6 +2435,19 @@ class Game {
     // 始终更新机器人 AI
     if (this.animalManager) {
       this.animalManager.update(dt);
+    }
+
+    // FOV 过渡（瞄准镜缩放）
+    if (this._targetFov !== undefined) {
+      const curFov = this.camera.fov;
+      const diff = this._targetFov - curFov;
+      if (Math.abs(diff) > 0.1) {
+        this.camera.fov += diff * Math.min(1, dt * 12);
+        this.camera.updateProjectionMatrix();
+      } else if (curFov !== this._targetFov) {
+        this.camera.fov = this._targetFov;
+        this.camera.updateProjectionMatrix();
+      }
     }
 
     // 渲染
