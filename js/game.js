@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=67';
-import { AnimalManager } from './animals.js?v=67';
+} from './voxel.js?v=68';
+import { AnimalManager } from './animals.js?v=68';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=67';
-import { audio } from './audio.js?v=67';
+} from './weapons.js?v=68';
+import { audio } from './audio.js?v=68';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1354,10 +1354,6 @@ class Game {
     }
     // 音效
     audio.hit();
-    // 爆头提示
-    if (isHeadshot) {
-      this._showKillFeed('爆头！双倍伤害');
-    }
     // 更新命中任务
     for (const q of this.quests) {
       if (q.done) continue;
