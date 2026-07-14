@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=54';
-import { AnimalManager } from './animals.js?v=54';
+} from './voxel.js?v=55';
+import { AnimalManager } from './animals.js?v=55';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=54';
-import { audio } from './audio.js?v=54';
+} from './weapons.js?v=55';
+import { audio } from './audio.js?v=55';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1022,8 +1022,8 @@ class Game {
     };
 
     // 命中/击杀回调
-    this.weaponManager.onEnemyHit = (animal) => {
-      this._showHitMarker();
+    this.weaponManager.onEnemyHit = (animal, isHeadshot) => {
+      this._showHitMarker(isHeadshot);
     };
     this.weaponManager.onEnemyKill = (animal) => {
       const names = { scout: '侦察机器人', heavy: '重型机器人', flyer: '飞行机器人', brute: '蛮力机器人', spider: '蜘蛛机器人' };
@@ -1345,14 +1345,19 @@ class Game {
   }
 
   /** 显示命中标记 - 准心变红 */
-  _showHitMarker() {
+  _showHitMarker(isHeadshot = false) {
     const crosshair = document.getElementById('crosshair');
     if (crosshair) {
       crosshair.classList.add('hit');
+      crosshair.classList.toggle('headshot', isHeadshot);
       this._hitMarkerTimer = 0.2;
     }
     // 音效
     audio.hit();
+    // 爆头提示
+    if (isHeadshot) {
+      this._showKillFeed('爆头！双倍伤害');
+    }
     // 更新命中任务
     for (const q of this.quests) {
       if (q.done) continue;
@@ -2487,7 +2492,10 @@ class Game {
       this._hitMarkerTimer -= dt;
       if (this._hitMarkerTimer <= 0) {
         const crosshair = document.getElementById('crosshair');
-        if (crosshair) crosshair.classList.remove('hit');
+        if (crosshair) {
+          crosshair.classList.remove('hit');
+          crosshair.classList.remove('headshot');
+        }
       }
     }
 

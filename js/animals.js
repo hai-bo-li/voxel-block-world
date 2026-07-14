@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=54';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=54';
-import { audio } from './audio.js?v=54';
+import { BlockType, isSolid } from './voxel.js?v=55';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=55';
+import { audio } from './audio.js?v=55';
 
 /* ============================================
    常量配置
@@ -29,7 +29,8 @@ const WANDER_RANGE = 20;
 const DETECTION_RANGE = 25;        // 检测玩家的距离
 const ATTACK_RANGE_MELEE = 2.0;    // 近战攻击距离
 const ATTACK_RANGE_RANGED = 20;    // 远程攻击距离
-const CHASE_SPEED_MULT = 1.8;      // 追击速度倍率
+const CHASE_SPEED_MULT = 1.5;      // 追击速度倍率（降低）
+const MODEL_FACING_OFFSET = Math.PI / 2; // 模型默认朝 +Z，atan2 返回 +X 方向，需偏移 90°
 const ATTACK_COOLDOWN_MELEE = 1.2; // 近战冷却
 const ATTACK_COOLDOWN_RANGED = 2.0;// 远程冷却
 const DAMAGE_MELEE_SCOUT = 3;      // 侦察机器人近战伤害
@@ -83,7 +84,7 @@ class Robot {
     this.state = 'idle';       // idle, wander, chase, attack
     this.stateTimer = randRange(1, 3);
     this.wanderDir = new THREE.Vector3(0, 0, 1);
-    this.wanderSpeed = 1.5;
+    this.wanderSpeed = 1.0;
     this.turnSpeed = 3.0;
     this.bobPhase = Math.random() * Math.PI * 2;
 
@@ -172,10 +173,11 @@ class Robot {
   }
 
   /** 受击 */
-  takeDamage(amount, source, isAuto = false, isExplosion = false) {
+  takeDamage(amount, source, isAuto = false, isExplosion = false, isHeadshot = false) {
     if (!this.alive) return;
 
-    this.hp -= amount;
+    const finalAmount = isHeadshot ? amount * 2 : amount;
+    this.hp -= finalAmount;
 
     // 受击闪烁效果
     this.hitFlashTimer = 0.15;
@@ -456,7 +458,7 @@ class Robot {
       this.state = 'wander';
       this.stateTimer = randRange(2, 5);
       this.wanderDir.set(
-        Math.cos(this.targetRotation), 0, Math.sin(this.targetRotation)
+        Math.cos(this.targetRotation - MODEL_FACING_OFFSET), 0, Math.sin(this.targetRotation - MODEL_FACING_OFFSET)
       ).normalize();
     }
   }
@@ -475,16 +477,16 @@ class Robot {
       this.position.x = nx;
       this.position.z = nz;
       this.position.y = ny;
-      this.targetRotation = Math.atan2(this.wanderDir.z, this.wanderDir.x);
+      this.targetRotation = Math.atan2(this.wanderDir.z, this.wanderDir.x) + MODEL_FACING_OFFSET;
     } else {
       this.targetRotation += randRange(Math.PI * 0.4, Math.PI * 0.8) * (Math.random() > 0.5 ? 1 : -1);
-      this.wanderDir.set(Math.cos(this.targetRotation), 0, Math.sin(this.targetRotation)).normalize();
+      this.wanderDir.set(Math.cos(this.targetRotation - MODEL_FACING_OFFSET), 0, Math.sin(this.targetRotation - MODEL_FACING_OFFSET)).normalize();
       this.stateTimer = Math.max(this.stateTimer, 0.5);
     }
 
     if (Math.random() < dt * 0.3) {
       this.targetRotation += randRange(-0.8, 0.8);
-      this.wanderDir.set(Math.cos(this.targetRotation), 0, Math.sin(this.targetRotation)).normalize();
+      this.wanderDir.set(Math.cos(this.targetRotation - MODEL_FACING_OFFSET), 0, Math.sin(this.targetRotation - MODEL_FACING_OFFSET)).normalize();
     }
 
     if (this.stateTimer <= 0) {
@@ -502,7 +504,7 @@ class Robot {
       this.state = 'wander';
       this.stateTimer = randRange(2, 4);
       this.wanderDir.set(
-        Math.cos(this.targetRotation), 0, Math.sin(this.targetRotation)
+        Math.cos(this.targetRotation - MODEL_FACING_OFFSET), 0, Math.sin(this.targetRotation - MODEL_FACING_OFFSET)
       ).normalize();
       return;
     }
@@ -529,7 +531,7 @@ class Robot {
     }
 
     // 面朝玩家
-    this.targetRotation = Math.atan2(dirToPlayer.z, dirToPlayer.x);
+    this.targetRotation = Math.atan2(dirToPlayer.z, dirToPlayer.x) + MODEL_FACING_OFFSET;
 
     // 追击超时回到巡逻
     if (this.stateTimer <= 0) {
@@ -551,7 +553,7 @@ class Robot {
 
     // 面朝玩家
     const dirToPlayer = this._getDirToPlayer();
-    this.targetRotation = Math.atan2(dirToPlayer.z, dirToPlayer.x);
+    this.targetRotation = Math.atan2(dirToPlayer.z, dirToPlayer.x) + MODEL_FACING_OFFSET;
 
     // 执行攻击
     if (this.attackCooldown <= 0 && this.targetPlayer) {
@@ -695,7 +697,7 @@ class ScoutBot extends Robot {
     super(scene, world, x, y, z);
     this.collisionWidth = 0.7;
     this.collisionHeight = 1.0;
-    this.wanderSpeed = 1.4;
+    this.wanderSpeed = 1.1;
     this.turnSpeed = 2.8;
     this.antennaAngle = 0;
 
@@ -795,7 +797,7 @@ class HeavyBot extends Robot {
     super(scene, world, x, y, z);
     this.collisionWidth = 0.85;
     this.collisionHeight = 1.15;
-    this.wanderSpeed = 1.0;
+    this.wanderSpeed = 0.7;
     this.turnSpeed = 2.0;
     this.antennaAngle = 0;
 
@@ -939,7 +941,7 @@ export class FlyerBot extends Robot {
     this.maxHP = 25;
     this.hp = 25;
     this.robotType = 'flyer';
-    this.speed = 5.5;
+    this.speed = 3.5;
     this.attackDamage = 4;
     this.attackRange = 2.0;
     this.detectRange = 28;
@@ -1055,6 +1057,13 @@ export class FlyerBot extends Robot {
       this.position.y += Math.sin(performance.now() * 0.002) * 0.02;
     }
 
+    // 面朝玩家方向（模型朝 +Z，需偏移）
+    this.targetRotation = Math.atan2(dz, dx) + MODEL_FACING_OFFSET;
+    const rDiff = this.targetRotation - this.rotation;
+    let shortDiff = ((rDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+    this.rotation += shortDiff * Math.min(3 * dt, 1);
+    this.group.rotation.y = this.rotation;
+
     // 同步 group 位置
     this.group.position.set(this.position.x, this.position.y, this.position.z);
 
@@ -1074,8 +1083,8 @@ export class BruteBot extends Robot {
     this.robotType = 'brute';
     this.maxHP = 120;
     this.hp = 120;
-    this.speed = 2.0;
-    this.wanderSpeed = 1.2;
+    this.speed = 1.3;
+    this.wanderSpeed = 0.8;
     this.turnSpeed = 1.8;
     this.attackDamage = 12;
     this.attackRange = 2.8;
@@ -1186,8 +1195,8 @@ export class SpiderBot extends Robot {
     this.robotType = 'spider';
     this.maxHP = 15;
     this.hp = 15;
-    this.speed = 7.0;
-    this.wanderSpeed = 3.5;
+    this.speed = 4.5;
+    this.wanderSpeed = 2.5;
     this.turnSpeed = 5.0;
     this.attackDamage = 3;
     this.attackRange = 1.5;

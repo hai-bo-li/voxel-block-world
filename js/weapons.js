@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=54';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=55';
 
 /* ============================================
    武器类型定义
@@ -269,10 +269,13 @@ class Bullet {
         // 检测本帧移动路径上是否有穿过球体（防止高速子弹穿透）
         if (distNow < hitRadius || distPrev < hitRadius || 
             (distNow !== distPrev && distNow < hitRadius + moveVec.length() && distPrev > distNow)) {
-          animal.takeDamage(this.weaponDef.damage, { position: this.mesh.position.clone() }, !!this.weaponDef.auto);
+          // 判定爆头：子弹Y坐标在怪物头部区域（顶部 30%）
+          const headThreshold = animal.position.y + h * 0.7;
+          const isHeadshot = this.mesh.position.y >= headThreshold;
+          animal.takeDamage(this.weaponDef.damage, { position: this.mesh.position.clone() }, !!this.weaponDef.auto, false, isHeadshot);
           // 通知武器管理器
           if (this._weaponManager) {
-            this._weaponManager._onAnimalHit(animal);
+            this._weaponManager._onAnimalHit(animal, isHeadshot);
           }
           this.destroy();
           return;
@@ -1119,8 +1122,8 @@ export class WeaponManager {
   }
 
   /** 子弹命中生物时调用 */
-  _onAnimalHit(animal) {
-    if (this.onEnemyHit) this.onEnemyHit(animal);
+  _onAnimalHit(animal, isHeadshot = false) {
+    if (this.onEnemyHit) this.onEnemyHit(animal, isHeadshot);
     if (!animal.alive && this.onEnemyKill) this.onEnemyKill(animal);
   }
 
@@ -1291,8 +1294,10 @@ export class WeaponManager {
           if (!animal.alive) continue;
           const dist = hitPos.distanceTo(animal.position);
           if (dist < 1.2) {
-            animal.takeDamage(def.damage, { position: this.camera.position.clone() }, !!def.auto);
-            this.onEnemyHit?.(animal);
+            const h = animal.collisionHeight || 1.0;
+            const isHeadshot = hitPos.y >= animal.position.y + h * 0.7;
+            animal.takeDamage(def.damage, { position: this.camera.position.clone() }, !!def.auto, false, isHeadshot);
+            this.onEnemyHit?.(animal, isHeadshot);
             if (!animal.alive) this.onEnemyKill?.(animal);
             return true;
           }
