@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=58';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=59';
 
 /* ============================================
    武器类型定义
@@ -738,6 +738,40 @@ export class WeaponRenderer {
     this.isReloading = false;
     this.scopeActive = false;  // 狙击枪瞄准镜状态
     this.placePhase = 0;       // 放置方块动画 0~1
+    // 换弹手（左手从下方伸上来操作弹匣）
+    this.reloadHandGroup = new THREE.Group();
+    this.reloadHandGroup.visible = false;
+    this._buildReloadHand();
+  }
+
+  /** 构建换弹用的左手模型 */
+  _buildReloadHand() {
+    while (this.reloadHandGroup.children.length > 0) {
+      const child = this.reloadHandGroup.children[0];
+      this.reloadHandGroup.remove(child);
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) child.material.dispose();
+    }
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xD4A574 });
+    const sleeveMat = new THREE.MeshLambertMaterial({ color: 0x37474F });
+    // 前臂袖子
+    const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.18), sleeveMat);
+    forearm.position.set(0, 0, 0.09);
+    this.reloadHandGroup.add(forearm);
+    // 手掌
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.035, 0.08), skinMat);
+    palm.position.set(0, 0, -0.02);
+    this.reloadHandGroup.add(palm);
+    // 手指（弯曲抓握弹匣）
+    const finger = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.02, 0.04), skinMat);
+    finger.position.set(0, -0.02, -0.06);
+    finger.rotation.x = 0.6;
+    this.reloadHandGroup.add(finger);
+    // 拇指
+    const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.02, 0.03), skinMat);
+    thumb.position.set(0.04, 0.0, -0.04);
+    thumb.rotation.x = 0.3;
+    this.reloadHandGroup.add(thumb);
   }
 
   /** 切换武器 */
@@ -1059,8 +1093,54 @@ export class WeaponRenderer {
       swingRotZ || -swingAngle * 0.3
     );
 
+    // 换弹手部动画
+    const isRanged = this.currentWeapon && WeaponDefs[this.currentWeapon]?.type === 'ranged';
+    if (this.reloadAnim > 0 && isRanged) {
+      this.reloadHandGroup.visible = true;
+      const t = this.reloadAnim;
+      // 根据武器类型确定弹匣位置
+      const magX = 0.35;
+      const magY = -0.42 + reloadOffsetY; // 跟随武器下沉
+      const magZ = -0.5;
+      let handX, handY, handZ, handRotX, handRotZ;
+      if (t < 0.25) {
+        // 阶段1：手从下方伸出，靠近弹匣
+        const p = t / 0.25;
+        const ease = 1 - Math.pow(1 - p, 2);
+        handX = magX;
+        handY = -0.7 + ease * (magY + 0.7); // 从 -0.7 升到弹匣位置
+        handZ = magZ + 0.05;
+        handRotX = -1.2 + ease * 0.8; // 从朝上转到朝前
+        handRotZ = 0;
+      } else if (t < 0.75) {
+        // 阶段2：手在弹匣区域操作（拔出→插入）
+        const p = (t - 0.25) / 0.5;
+        handX = magX;
+        // 模拟拔弹匣（下拉）→插入（上推）的往复动作
+        const pull = Math.sin(p * Math.PI);
+        handY = magY - pull * 0.12;
+        handZ = magZ + 0.05 - pull * 0.08; // 往后拉
+        handRotX = -0.4 + pull * 0.3;
+        handRotZ = pull * 0.2; // 手腕轻微旋转
+      } else {
+        // 阶段3：手收回下方
+        const p = (t - 0.75) / 0.25;
+        const ease = Math.pow(p, 2);
+        handX = magX;
+        handY = magY + ease * (-0.7 - magY); // 从弹匣位置降回 -0.7
+        handZ = magZ + 0.05;
+        handRotX = -0.4 - ease * 0.8;
+        handRotZ = 0;
+      }
+      this.reloadHandGroup.position.set(handX, handY, handZ);
+      this.reloadHandGroup.rotation.set(handRotX, 0, handRotZ);
+    } else {
+      this.reloadHandGroup.visible = false;
+    }
+
     if (!this.weaponGroup.parent) {
       this.camera.add(this.weaponGroup);
+      this.camera.add(this.reloadHandGroup);
     }
   }
 }
