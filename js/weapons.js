@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=63';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=64';
 
 /* ============================================
    武器类型定义
@@ -1055,23 +1055,23 @@ export class WeaponRenderer {
     if (this.reloadAnim > 0) {
       const t = this.reloadAnim;
       if (t < 0.3) {
-        // 阶段1：武器下沉
+        // 阶段1：武器大幅下沉+倾斜
         const p = t / 0.3;
-        reloadOffsetY = -p * 0.15;
-        reloadRotX = p * 0.4;
+        reloadOffsetY = -p * 0.35;
+        reloadRotX = p * 0.8;
       } else if (t < 0.6) {
-        // 阶段2：弹匣弹出（快速下移）
+        // 阶段2：弹匣弹出（大幅下移+旋转）
         const p = (t - 0.3) / 0.3;
-        reloadOffsetY = -0.15 - p * 0.1;
-        reloadOffsetZ = p * 0.05;
-        reloadRotX = 0.4 + p * 0.2;
+        reloadOffsetY = -0.35 - p * 0.15;
+        reloadOffsetZ = p * 0.12;
+        reloadRotX = 0.8 + p * 0.5;
       } else {
-        // 阶段3：装填归位
+        // 阶段3：装填归位（快速弹回）
         const p = (t - 0.6) / 0.4;
-        const ease = 1 - Math.pow(1 - p, 3); // easeOutCubic
-        reloadOffsetY = -0.25 * (1 - ease);
-        reloadOffsetZ = 0.05 * (1 - ease);
-        reloadRotX = 0.6 * (1 - ease);
+        const ease = 1 - Math.pow(1 - p, 3);
+        reloadOffsetY = -0.5 * (1 - ease);
+        reloadOffsetZ = 0.12 * (1 - ease);
+        reloadRotX = 1.3 * (1 - ease);
       }
     }
 
@@ -1100,33 +1100,33 @@ export class WeaponRenderer {
       const magZ = -0.5;
       let handX, handY, handZ, handRotX, handRotZ;
       if (t < 0.25) {
-        // 阶段1：手从下方伸出，靠近弹匣
+        // 阶段1：手从下方快速伸出，靠近弹匣
         const p = t / 0.25;
         const ease = 1 - Math.pow(1 - p, 2);
         handX = magX;
-        handY = -0.7 + ease * (magY + 0.7); // 从 -0.7 升到弹匣位置
+        handY = -0.9 + ease * (magY + 0.9); // 从 -0.9 升到弹匣位置
         handZ = magZ + 0.05;
-        handRotX = -1.2 + ease * 0.8; // 从朝上转到朝前
-        handRotZ = 0;
+        handRotX = -1.6 + ease * 1.0; // 从朝上大幅转到朝前
+        handRotZ = ease * 0.3;
       } else if (t < 0.75) {
-        // 阶段2：手在弹匣区域操作（拔出→插入）
+        // 阶段2：手在弹匣区域操作（拔出→插入）大幅往复
         const p = (t - 0.25) / 0.5;
         handX = magX;
-        // 模拟拔弹匣（下拉）→插入（上推）的往复动作
+        // 模拟拔弹匣（大幅下拉）→插入（上推）的往复动作
         const pull = Math.sin(p * Math.PI);
-        handY = magY - pull * 0.12;
-        handZ = magZ + 0.05 - pull * 0.08; // 往后拉
-        handRotX = -0.4 + pull * 0.3;
-        handRotZ = pull * 0.2; // 手腕轻微旋转
+        handY = magY - pull * 0.22;
+        handZ = magZ + 0.05 - pull * 0.15; // 大幅往后拉
+        handRotX = -0.6 + pull * 0.5;
+        handRotZ = 0.3 + pull * 0.4; // 手腕明显旋转
       } else {
-        // 阶段3：手收回下方
+        // 阶段3：手快速收回下方
         const p = (t - 0.75) / 0.25;
         const ease = Math.pow(p, 2);
         handX = magX;
-        handY = magY + ease * (-0.7 - magY); // 从弹匣位置降回 -0.7
+        handY = magY + ease * (-0.9 - magY); // 从弹匣位置降回 -0.9
         handZ = magZ + 0.05;
-        handRotX = -0.4 - ease * 0.8;
-        handRotZ = 0;
+        handRotX = -0.6 - ease * 1.0;
+        handRotZ = 0.3 * (1 - ease);
       }
       this.reloadHandGroup.position.set(handX, handY, handZ);
       this.reloadHandGroup.rotation.set(handRotX, 0, handRotZ);
