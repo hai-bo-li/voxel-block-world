@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=71';
-import { AnimalManager } from './animals.js?v=71';
+} from './voxel.js?v=72';
+import { AnimalManager } from './animals.js?v=72';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=71';
-import { audio } from './audio.js?v=71';
+} from './weapons.js?v=72';
+import { audio } from './audio.js?v=72';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -953,6 +953,7 @@ class Game {
     });
     this.animalManager.robots = [];
     this.animalManager._respawnQueue = [];
+    this.animalManager._spawned = false;
 
     // 4. 清除所有子弹（玩家武器）
     this.weaponManager.bullets.forEach(b => { if (b.mesh) this.scene.remove(b.mesh); });
