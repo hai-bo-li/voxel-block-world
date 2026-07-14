@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=48';
-import { AnimalManager } from './animals.js?v=48';
+} from './voxel.js?v=49';
+import { AnimalManager } from './animals.js?v=49';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=48';
-import { audio } from './audio.js?v=48';
+} from './weapons.js?v=49';
+import { audio } from './audio.js?v=49';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1958,10 +1958,13 @@ class Game {
         this._rightMouseDown = true;
         if (currentItem && currentItem.type === 'weapon') {
           const wDef = WeaponDefs[currentItem.weaponType];
-          if (wDef && wDef.type === 'ranged') {
-            // 远程武器：右键切换瞄准（循环：off→1.5x→3x→off）
+          if (currentItem.weaponType === WeaponType.SNIPER) {
+            // 仅狙击枪：右键切换瞄准（循环：off→1.5x→3x→off）
             this._toggleScope(true);
             try { this.weaponManager.renderer.setScopeActive(this.isAiming); } catch(e) {}
+          } else if (currentItem.weaponType !== WeaponType.GRENADE) {
+            // 普通远程武器右键：破坏方块
+            this.player.breakBlock();
           }
           // 手榴弹：右键按住显示抛物线，松开投掷
         } else {
