@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=39';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=40';
 
 /* ============================================
    武器类型定义
@@ -1076,7 +1076,7 @@ export class WeaponManager {
     }
 
     // 手榴弹数量
-    this.grenadeCount = 5;
+    this.grenadeCount = Infinity;
 
     // 活跃子弹列表
     this.bullets = [];
@@ -1184,24 +1184,19 @@ export class WeaponManager {
   /** 投掷手榴弹 */
   throwGrenade(player) {
     if (this.cooldownTimer > 0) return false;
-    if (this.grenadeCount <= 0) return false;
 
     const def = WeaponDefs[WeaponType.GRENADE];
     if (!def) return false;
 
     this.cooldownTimer = def.cooldown;
-    this.grenadeCount--;
+    // 手榴弹无限弹药
 
-    // 计算投掷方向
+    // 使用相机精确方向（以准星为准）
     const direction = new THREE.Vector3(0, 0, -1);
-    direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
-    direction.x += Math.sin(player.pitch) * Math.sin(player.yaw) * 0.3;
-    direction.z += Math.sin(player.pitch) * Math.cos(player.yaw) * 0.3;
-    direction.y = -Math.sin(player.pitch) * 0.5;
+    direction.applyQuaternion(player.camera.quaternion);
     direction.normalize();
 
-    const origin = player.position.clone();
-    origin.y += 1.5; // 从玩家头部位置投出
+    const origin = player.camera.position.clone();
 
     const grenade = new Grenade(origin, direction, def, this.scene, player, this);
     this.grenades.push(grenade);
