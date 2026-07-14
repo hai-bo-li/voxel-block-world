@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=30';
-import { AnimalManager } from './animals.js?v=30';
+} from './voxel.js?v=31';
+import { AnimalManager } from './animals.js?v=31';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=30';
-import { audio } from './audio.js?v=30';
+} from './weapons.js?v=31';
+import { audio } from './audio.js?v=31';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1886,7 +1886,17 @@ class Game {
       if (e.button === 2) {
         this._isFiring = false; // 停止右键连射
         if (this.isAiming) {
+          // 狙击枪开镜松开右键自动射击
+          const currentItem = this.weaponManager.inventory.getCurrentItem();
+          if (currentItem && currentItem.type === 'weapon') {
+            const wDef = WeaponDefs[currentItem.weaponType];
+            if (wDef && wDef.ammoType === 'sniper') {
+              this._weaponAttack();
+            }
+          }
           this._toggleScope(false);
+          this.weaponManager.renderer.setScopeActive(false);
+        }
           this.weaponManager.renderer.setScopeActive(false);
         }
       }
