@@ -155,13 +155,13 @@ class Player {
       const kbMove = this.knockbackVel.clone().multiplyScalar(dt);
       // X轴
       this.position.x += kbMove.x;
-      this._collide('x');
+      this._resolveCollision('x');
       // Z轴
       this.position.z += kbMove.z;
-      this._collide('z');
+      this._resolveCollision('z');
       // Y轴
       this.position.y += kbMove.y;
-      this._collide('y');
+      this._resolveCollision('y');
       this.knockbackVel.multiplyScalar(0.85);
       if (this.knockbackVel.lengthSq() < 0.01) {
         this.knockbackVel.set(0, 0, 0);
