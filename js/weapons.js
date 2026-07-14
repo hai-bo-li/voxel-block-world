@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=69';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=70';
 
 /* ============================================
    武器类型定义
@@ -1336,11 +1336,8 @@ export class WeaponManager {
     this.renderer.triggerSwing();
     if (this.onRecoil) this.onRecoil(def.recoil);
 
-    const dir = new THREE.Vector3(
-      -Math.sin(yaw) * Math.cos(pitch),
-      Math.sin(pitch),
-      -Math.cos(yaw) * Math.cos(pitch)
-    ).normalize();
+    // 直接使用相机四元数获取准星方向，确保与画面一致
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
 
     const origin = this.camera.position.clone();
 
