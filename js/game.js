@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=32';
-import { AnimalManager } from './animals.js?v=32';
+} from './voxel.js?v=33';
+import { AnimalManager } from './animals.js?v=33';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=32';
-import { audio } from './audio.js?v=32';
+} from './weapons.js?v=33';
+import { audio } from './audio.js?v=33';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -628,45 +628,25 @@ class TouchController {
       btnAttack.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        // 狙击枪长按开镜
+        // 攻击按钮直接射击，开镜用瞄准按钮
+        this.game._weaponAttack();
+        // 自动武器：长按持续射击
         const wType = this.game.weaponManager.currentWeapon;
         const wDef = WeaponDefs[wType];
-        if (wDef && wDef.category === 'ranged' && wDef.scopeZoom) {
-          _attackHoldTimer = setTimeout(() => {
-            this.game._toggleScope(true);
-            _attackHoldTimer = 'scoped';
-          }, 300);
-        } else {
-          this.game._weaponAttack();
-          // 自动武器：长按持续射击
-          if (wDef && wDef.auto) {
-            this.game._isFiring = true;
-          }
+        if (wDef && wDef.auto) {
+          this.game._isFiring = true;
         }
         _flashBtn(btnAttack);
       });
       btnAttack.addEventListener('pointerup', (e) => {
         e.preventDefault();
         this.game._isFiring = false;
-        if (_attackHoldTimer === 'scoped') {
-          this.game._weaponAttack();
-          this.game._toggleScope(false);
-        } else if (_attackHoldTimer) {
-          clearTimeout(_attackHoldTimer);
-          this.game._weaponAttack();
-        }
-        _attackHoldTimer = null;
       });
       btnAttack.addEventListener('pointercancel', (e) => {
         this.game._isFiring = false;
-        if (_attackHoldTimer && _attackHoldTimer !== 'scoped') clearTimeout(_attackHoldTimer);
-        if (_attackHoldTimer === 'scoped') this.game._toggleScope(false);
-        _attackHoldTimer = null;
       });
       btnAttack.addEventListener('pointerleave', (e) => {
         this.game._isFiring = false;
-        if (_attackHoldTimer && _attackHoldTimer !== 'scoped') clearTimeout(_attackHoldTimer);
-        if (_attackHoldTimer === 'scoped') this.game._toggleScope(false);
         _attackHoldTimer = null;
       });
     }
@@ -676,15 +656,20 @@ class TouchController {
       btnAim.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.game._toggleScope(true);
+        // 右键切换瞄准（再按关闭）
+        if (this.game.isAiming) {
+          this.game._toggleScope(false);
+          if (this.game.weaponManager && this.game.weaponManager.renderer) {
+            this.game.weaponManager.renderer.setScopeActive(false);
+          }
+        } else {
+          this.game._toggleScope(true);
+          if (this.game.weaponManager && this.game.weaponManager.renderer) {
+            this.game.weaponManager.renderer.setScopeActive(true);
+          }
+        }
         _flashBtn(btnAim);
       });
-      btnAim.addEventListener('pointerup', (e) => {
-        e.preventDefault();
-        this.game._toggleScope(false);
-      });
-      btnAim.addEventListener('pointercancel', () => this.game._toggleScope(false));
-      btnAim.addEventListener('pointerleave', () => this.game._toggleScope(false));
     }
 
     const btnFullscreen = document.getElementById('btnFullscreen');
@@ -1672,6 +1657,11 @@ class Game {
     if (this.weaponManager) {
       const weaponType = this.inventory.getCurrentWeaponType();
       this.weaponManager.switchWeapon(weaponType);
+      // 切换武器时关闭瞄准
+      if (this.isAiming) {
+        this._toggleScope(false);
+        this.weaponManager.renderer.setScopeActive(false);
+      }
     }
 
     const nameEl = this.ui.selectedBlockName;
@@ -1867,9 +1857,14 @@ class Game {
               this._weaponAttack();
               this._isFiring = true;
             } else {
-              // 狙击枪/手枪/霰弹枪：右键瞄准
-              this._toggleScope(true);
-              this.weaponManager.renderer.setScopeActive(true);
+              // 狙击枪/手枪/霰弹枪：右键切换瞄准（再按关闭）
+              if (this.isAiming) {
+                this._toggleScope(false);
+                this.weaponManager.renderer.setScopeActive(false);
+              } else {
+                this._toggleScope(true);
+                this.weaponManager.renderer.setScopeActive(true);
+              }
             }
           }
         } else {
@@ -1885,18 +1880,6 @@ class Game {
       }
       if (e.button === 2) {
         this._isFiring = false; // 停止右键连射
-        if (this.isAiming) {
-          // 狙击枪开镜松开右键自动射击
-          const currentItem = this.weaponManager.inventory.getCurrentItem();
-          if (currentItem && currentItem.type === 'weapon') {
-            const wDef = WeaponDefs[currentItem.weaponType];
-            if (wDef && wDef.ammoType === 'sniper') {
-              this._weaponAttack();
-            }
-          }
-          this._toggleScope(false);
-          this.weaponManager.renderer.setScopeActive(false);
-        }
       }
     });
 
