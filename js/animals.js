@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=52';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=52';
-import { audio } from './audio.js?v=52';
+import { BlockType, isSolid } from './voxel.js?v=53';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=53';
+import { audio } from './audio.js?v=53';
 
 /* ============================================
    常量配置
@@ -1094,7 +1094,7 @@ export class BruteBot extends Robot {
     return g;
   }
 
-  update(dt) {
+  update(dt, spawnCenter) {
     if (!this.alive) return;
     // 眼睛闪烁
     if (this._eye) {
@@ -1109,11 +1109,8 @@ export class BruteBot extends Robot {
       if (this._fistL) this._fistL.rotation.x = 0;
       if (this._fistR) this._fistR.rotation.x = 0;
     }
-    // 使用基类AI但更慢
-    this._updateAI(dt, this.speed, this.attackRange, this.detectRange, this.attackCooldown);
-    this._updateHealthBar();
-    this._updateFlash(dt);
-    this._updateDeathParticles(dt);
+    // 使用基类AI
+    super.update(dt, spawnCenter);
   }
 
   _attack(p) {
@@ -1185,7 +1182,7 @@ export class SpiderBot extends Robot {
     return g;
   }
 
-  update(dt) {
+  update(dt, spawnCenter) {
     if (!this.alive) return;
     // 腿部动画
     this._legPhase += dt * 15;
@@ -1194,11 +1191,8 @@ export class SpiderBot extends Robot {
         leg.rotation.x = Math.sin(this._legPhase + i * 0.8) * 0.3;
       });
     }
-    // 快速AI
-    this._updateAI(dt, this.speed, this.attackRange, this.detectRange, this.attackCooldown);
-    this._updateHealthBar();
-    this._updateFlash(dt);
-    this._updateDeathParticles(dt);
+    // 使用基类AI
+    super.update(dt, spawnCenter);
   }
 }
 
