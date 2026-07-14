@@ -8,13 +8,13 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=28';
-import { AnimalManager } from './animals.js?v=28';
+} from './voxel.js?v=29';
+import { AnimalManager } from './animals.js?v=29';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
-} from './weapons.js?v=28';
-import { audio } from './audio.js?v=28';
+} from './weapons.js?v=29';
+import { audio } from './audio.js?v=29';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -150,10 +150,19 @@ class Player {
     this._smoothYaw += (this.yaw - this._smoothYaw) * Math.min(1, dt * 20);
     this._smoothPitch += (this.pitch - this._smoothPitch) * Math.min(1, dt * 20);
 
-    // 击退物理
+    // 击退物理：作为位移增量，每轴单独走碰撞检测
     if (this.knockbackVel.lengthSq() > 0.01) {
-      this.position.add(this.knockbackVel.clone().multiplyScalar(dt));
-      this.knockbackVel.multiplyScalar(0.88);
+      const kbMove = this.knockbackVel.clone().multiplyScalar(dt);
+      // X轴
+      this.position.x += kbMove.x;
+      this._collide('x');
+      // Z轴
+      this.position.z += kbMove.z;
+      this._collide('z');
+      // Y轴
+      this.position.y += kbMove.y;
+      this._collide('y');
+      this.knockbackVel.multiplyScalar(0.85);
       if (this.knockbackVel.lengthSq() < 0.01) {
         this.knockbackVel.set(0, 0, 0);
       }
@@ -1018,19 +1027,14 @@ class Game {
       this.player.pitch += recoilAmount * 0.3;
       this.player.yaw += (Math.random() - 0.5) * recoilAmount * 0.15;
 
-      // 物理后坐力：推动玩家后退（直接位移+knockbackVel）
+      // 物理后坐力：推动玩家后退（通过knockbackVel，走碰撞检测防穿墙）
       const wType = this.weaponManager.currentWeapon;
       const wDef = WeaponDefs[wType];
       if (wDef && wDef.pushback) {
-        // 相机后方方向（0,0,1 是相机局部空间的背后方向）
         const backDir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.camera.quaternion);
-        // 直接位移（立即反馈）- 沿后方移动 = 后退
-        this.player.position.x += backDir.x * wDef.pushback * 0.15;
-        this.player.position.z += backDir.z * wDef.pushback * 0.15;
-        // 叠加持续后退速度
-        this.player.knockbackVel.x += backDir.x * wDef.pushback * 5;
-        this.player.knockbackVel.z += backDir.z * wDef.pushback * 5;
-        this.player.knockbackVel.y += wDef.pushback * 1.5;
+        this.player.knockbackVel.x += backDir.x * wDef.pushback * 3;
+        this.player.knockbackVel.z += backDir.z * wDef.pushback * 3;
+        this.player.knockbackVel.y += wDef.pushback * 0.8; // 轻微上仰
       }
     };
   }
@@ -1581,7 +1585,7 @@ class Game {
       this._deathScreenEl.style.display = 'flex';
     }
     if (!this.isMobile) {
-      document.exitPointerLock();
+      try { document.exitPointerLock(); } catch(_) {}
     }
   }
 
@@ -1592,7 +1596,7 @@ class Game {
       this._deathScreenEl.style.display = 'none';
     }
     if (!this.isMobile) {
-      this.canvas.requestPointerLock();
+      try { this.canvas.requestPointerLock(); } catch(_) {}
     }
   }
 
@@ -1760,7 +1764,10 @@ class Game {
         if (e.code === 'KeyE' || e.code === 'KeyB' || e.code === 'Escape') {
           this.inventoryUI.close();
           this.isInventoryOpen = false;
-          if (!this.isMobile) this.canvas.requestPointerLock();
+          // 不自动requestPointerLock，用户点击画面时会自动锁定
+          // 延迟恢复避免pauseScreen闪现
+          this._inventoryJustClosed = true;
+          setTimeout(() => { this._inventoryJustClosed = false; }, 500);
         }
         return;
       }
@@ -1780,7 +1787,8 @@ class Game {
 
       if ((e.code === 'KeyE' || e.code === 'KeyB') && this.isRunning && !this.isMobile) {
         this.isInventoryOpen = true;
-        document.exitPointerLock();
+        this._inventoryJustClosed = false;
+        try { document.exitPointerLock(); } catch(_) {}
         this.inventoryUI.open();
         return;
       }
@@ -1906,15 +1914,17 @@ class Game {
         this.isPointerLocked = document.pointerLockElement === this.canvas;
         if (this.isPointerLocked) {
           this.ui.pauseScreen.style.display = 'none';
+          this.isInventoryOpen = false;
+          if (this.inventoryUI) this.inventoryUI.close();
           this._showGameUI(true);
-        } else if (this.isRunning) {
+        } else if (this.isRunning && !this.isInventoryOpen && !this._inventoryJustClosed) {
           this.ui.pauseScreen.style.display = 'flex';
         }
       });
 
       const requestLock = () => {
-        if (!this.isPointerLocked && this.isRunning) {
-          this.canvas.requestPointerLock();
+        if (!this.isPointerLocked && this.isRunning && !this.isInventoryOpen) {
+          try { this.canvas.requestPointerLock(); } catch(_) {}
         }
       };
 
@@ -2101,10 +2111,10 @@ class Game {
 
     if (panel.style.display === 'none') {
       panel.style.display = 'flex';
-      document.exitPointerLock();
+      try { document.exitPointerLock(); } catch(_) {}
     } else {
       panel.style.display = 'none';
-      if (!this.isMobile) this.canvas.requestPointerLock();
+      if (!this.isMobile) try { this.canvas.requestPointerLock(); } catch(_) {}
     }
   }
 
