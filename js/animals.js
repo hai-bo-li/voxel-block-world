@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=36';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=36';
-import { audio } from './audio.js?v=36';
+import { BlockType, isSolid } from './voxel.js?v=37';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=37';
+import { audio } from './audio.js?v=37';
 
 /* ============================================
    常量配置
@@ -156,7 +156,7 @@ class Robot {
   }
 
   /** 受击 */
-  takeDamage(amount, source, isAuto = false) {
+  takeDamage(amount, source, isAuto = false, isExplosion = false) {
     if (!this.alive) return;
 
     this.hp -= amount;
@@ -166,9 +166,10 @@ class Robot {
 
     // 击退（包含向上的分量）
     if (source && source.position) {
-      const kb = computeKnockback(this.position, source.position, KNOCKBACK_STRENGTH);
+      const strength = isExplosion ? 12 : KNOCKBACK_STRENGTH;
+      const kb = computeKnockback(this.position, source.position, strength);
       this.knockbackVel.copy(kb);
-      this.verticalVel = 5; // 击退时给一个向上的初速
+      this.verticalVel = isExplosion ? 10 : 5; // 爆炸击飞更高
     }
 
     // 受击粒子

@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=36';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=37';
 
 /* ============================================
    武器类型定义
@@ -516,6 +516,18 @@ class Grenade {
   }
 
   _spawnExplosionParticles(pos) {
+    // 闪光球
+    const flashGeo = new THREE.SphereGeometry(0.8, 8, 8);
+    const flashMat = new THREE.MeshBasicMaterial({ color: 0xFFFF00, transparent: true, opacity: 1 });
+    const flash = new THREE.Mesh(flashGeo, flashMat);
+    flash.position.copy(pos);
+    flash._vel = new THREE.Vector3(0, 0, 0);
+    flash._life = 0.15;
+    flash._isFlash = true;
+    this.scene.add(flash);
+    if (!this.scene._particles) this.scene._particles = [];
+    this.scene._particles.push(flash);
+
     // 火焰粒子
     const fireCount = 15;
     for (let i = 0; i < fireCount; i++) {
@@ -558,7 +570,8 @@ class Grenade {
       particle._life = 0.5 + Math.random() * 0.8;
 
       this.scene.add(particle);
-      if (!this.scene._particles) this.scene._particles.push(particle);
+      if (!this.scene._particles) this.scene._particles = [];
+      this.scene._particles.push(particle);
     }
   }
 
@@ -1384,7 +1397,14 @@ export class WeaponManager {
         }
         p.position.add(p._vel.clone().multiplyScalar(dt));
         p._vel.y -= 15 * dt;
-        p.material.opacity = Math.max(0, p._life * 2);
+        if (p._isFlash) {
+          // 闪光球：缩小并消失
+          const s = Math.max(0.01, p._life / 0.15);
+          p.scale.set(s, s, s);
+          p.material.opacity = s;
+        } else {
+          p.material.opacity = Math.max(0, p._life * 2);
+        }
         p.material.transparent = true;
       }
     }

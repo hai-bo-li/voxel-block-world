@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=36';
-import { AnimalManager } from './animals.js?v=36';
+} from './voxel.js?v=37';
+import { AnimalManager } from './animals.js?v=37';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=36';
-import { audio } from './audio.js?v=36';
+} from './weapons.js?v=37';
+import { audio } from './audio.js?v=37';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -79,7 +79,7 @@ class Player {
   }
 
   /** 玩家受击 */
-  takeDamage(amount, fromPosition) {
+  takeDamage(amount, fromPosition, isExplosion = false) {
     if (!this.alive || this.invincibleTimer > 0) return;
 
     this.hp = Math.max(0, this.hp - amount);
@@ -89,8 +89,12 @@ class Player {
 
     // 击退
     if (fromPosition) {
-      const kb = computeKnockback(this.position, fromPosition, 3);
+      const strength = isExplosion ? 10 : 3;
+      const kb = computeKnockback(this.position, fromPosition, strength);
       this.knockbackVel.add(kb);
+      if (isExplosion) {
+        this.velocity.y = 8; // 爆炸击飞
+      }
     }
 
     this.onHPChanged?.(this.hp, this.maxHP);
@@ -657,8 +661,12 @@ class TouchController {
       btnAim.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        // 右键切换瞄准（再按关闭）
-        if (this.game.isAiming) {
+        const currentItem = this.game.inventory?.getCurrentItem();
+        const isGrenade = currentItem && currentItem.weaponType === WeaponType.GRENADE;
+        if (isGrenade) {
+          // 手榴弹：按住显示抛物线
+          this.game._rightMouseDown = true;
+        } else if (this.game.isAiming) {
           this.game._toggleScope(false);
           if (this.game.weaponManager && this.game.weaponManager.renderer) {
             this.game.weaponManager.renderer.setScopeActive(false);
@@ -670,6 +678,24 @@ class TouchController {
           }
         }
         _flashBtn(btnAim);
+      });
+      btnAim.addEventListener('pointerup', (e) => {
+        const currentItem = this.game.inventory?.getCurrentItem();
+        const isGrenade = currentItem && currentItem.weaponType === WeaponType.GRENADE;
+        if (isGrenade && this.game._rightMouseDown) {
+          // 松开投掷手榴弹
+          this.game._rightMouseDown = false;
+          this.game._weaponAttack();
+          if (this.game.grenadeTrajectory) this.game.grenadeTrajectory.hide();
+        }
+      });
+      btnAim.addEventListener('pointercancel', () => {
+        this.game._rightMouseDown = false;
+        if (this.game.grenadeTrajectory) this.game.grenadeTrajectory.hide();
+      });
+      btnAim.addEventListener('pointerleave', () => {
+        this.game._rightMouseDown = false;
+        if (this.game.grenadeTrajectory) this.game.grenadeTrajectory.hide();
       });
     }
 
@@ -755,6 +781,7 @@ class Game {
     this.fps = 0;
 
     this.isAiming = false;
+    this._rightMouseDown = false;
     this.baseFOV = 75;
 
     // Q键快速切换
@@ -1051,7 +1078,7 @@ class Game {
     };
 
     this.weaponManager.onPlayerHurt = (damage, fromPos) => {
-      this.player.takeDamage(damage, fromPos);
+      this.player.takeDamage(damage, fromPos, true);
     };
 
     this.weaponManager.onGrenadeExplode = () => {
@@ -1068,7 +1095,7 @@ class Game {
         if (dist <= radius) {
           const dmg = Math.round(damage * (1 - dist / radius));
           if (dmg > 0) {
-            robot.takeDamage(dmg, { position: center }, true);
+            robot.takeDamage(dmg, { position: center }, true, true);
             this._showHitMarker();
           }
         }
@@ -1898,6 +1925,7 @@ class Game {
           this.weaponManager.triggerPlace();
         }
       } else if (e.button === 2) {
+        this._rightMouseDown = true;
         if (currentItem && currentItem.type === 'weapon') {
           const wDef = WeaponDefs[currentItem.weaponType];
           if (wDef && wDef.type === 'ranged') {
@@ -1910,16 +1938,28 @@ class Game {
               this.weaponManager.renderer.setScopeActive(true);
             }
           }
+          // 手榴弹：右键按住显示抛物线，松开投掷
         } else {
           this.player.breakBlock();
         }
       }
     });
 
-    // 鼠标释放：停止自动射击
+    // 鼠标释放：停止自动射击 / 投掷手榴弹
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) {
         this._isFiring = false;
+      } else if (e.button === 2) {
+        this._rightMouseDown = false;
+        // 右键松开：如果手持手榴弹则投掷
+        if (this.isPointerLocked) {
+          const currentItem = this.inventory.getCurrentItem();
+          if (currentItem && currentItem.type === 'weapon' && currentItem.weaponType === WeaponType.GRENADE) {
+            this._weaponAttack();
+          }
+        }
+        // 隐藏抛物线
+        if (this.grenadeTrajectory) this.grenadeTrajectory.hide();
       }
     });
 
@@ -2343,10 +2383,10 @@ class Game {
           }
         }
 
-        // 手榴弹抛物线轨迹
+        // 手榴弹抛物线轨迹 - 仅右键按住时显示
         if (this.grenadeTrajectory) {
           const currentItem = this.inventory.getCurrentItem();
-          if (currentItem && currentItem.weaponType === WeaponType.GRENADE) {
+          if (this._rightMouseDown && currentItem && currentItem.weaponType === WeaponType.GRENADE) {
             const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
             const wDef = WeaponDefs[WeaponType.GRENADE];
             this.grenadeTrajectory.show(this.camera.position.clone(), dir, wDef.throwSpeed || 20);
