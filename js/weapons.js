@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=81';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=82';
 
 /* ============================================
    武器类型定义
@@ -1107,194 +1107,206 @@ export class WeaponRenderer {
       pickPoint.position.set(0.47, 0.12, -0.48);
       this.weaponGroup.add(pickPoint);
     } else if (weaponType === WeaponType.CHAINSAW) {
-      // 链锯 - 仿照真实油锯造型
-      const darkMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-      const bodyMat = new THREE.MeshLambertMaterial({ color: 0xCC0000 });
-      const metalMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+      // 链锯 - 仿照 STIHL 真实油锯造型
+      // 图片特征：水平长条形，右端橙色方正发动机，左端银色长导板+黑色链条锯齿
+      //         后U型黑色大手柄（上方），前黑色环状辅助手柄（下方），银色过渡连接块
+      const orangeMat = new THREE.MeshLambertMaterial({ color: 0xE85D04 });
+      const darkMat   = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+      const gripMat   = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+      const silverMat = new THREE.MeshLambertMaterial({ color: 0xC0C0C0 });
       const chromeMat = new THREE.MeshLambertMaterial({ color: 0xB0B0B0 });
-      const chainMat = new THREE.MeshLambertMaterial({ color: 0x607D8B });
-      const toothMat = new THREE.MeshLambertMaterial({ color: 0xC0C0C0 });
-      const gripMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+      const blackMat  = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
+      const toothMat  = new THREE.MeshLambertMaterial({ color: 0xE0E0E0 });
+      const redDotMat = new THREE.MeshBasicMaterial({ color: 0xFF0000 });
 
-      // --- 主机身（发动机壳体） ---
-      // 大身：圆柱形引擎体
-      const engineBody = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.07, 0.075, 0.22, 12),
-        bodyMat
-      );
-      engineBody.rotation.x = Math.PI / 2;
-      engineBody.position.set(0.32, -0.12, -0.42);
-      this.weaponGroup.add(engineBody);
+      // 整体参数：链锯水平放置，Z轴为长轴（-Z = 前方导板端，+Z = 后方引擎端）
+      // 基准位置在玩家右手前方
+      const px = 0.30, py = -0.12;
 
-      // 引擎前端盖（手拉启动器）
-      const engineCap = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.06, 0.06, 0.03, 12),
-        darkMat
+      // ====== 发动机壳体（右后，方正橙色主体） ======
+      // 主体方块
+      const engineBlock = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, 0.09, 0.12), orangeMat
       );
-      engineCap.rotation.x = Math.PI / 2;
-      engineCap.position.set(0.32, -0.12, -0.31);
-      this.weaponGroup.add(engineCap);
+      engineBlock.position.set(px, py + 0.005, -0.44);
+      this.weaponGroup.add(engineBlock);
+      // 引擎前侧（连接导板方向，略收窄）
+      const engineFront = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.07, 0.04), orangeMat
+      );
+      engineFront.position.set(px, py, -0.52);
+      this.weaponGroup.add(engineFront);
+      // 引擎后端（消音器侧，略矮）
+      const engineRear = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.06, 0.04), darkMat
+      );
+      engineRear.position.set(px, py - 0.005, -0.37);
+      this.weaponGroup.add(engineRear);
+      // 散热格栅（引擎侧面黑色条纹）
+      for (let i = 0; i < 3; i++) {
+        const grill = new THREE.Mesh(
+          new THREE.BoxGeometry(0.072, 0.012, 0.004), blackMat
+        );
+        grill.position.set(px, py + 0.02 - i * 0.015, -0.43);
+        this.weaponGroup.add(grill);
+      }
+      // 锯链调节器（引擎底部小黑块）
+      const adjuster = new THREE.Mesh(
+        new THREE.BoxGeometry(0.02, 0.015, 0.015), blackMat
+      );
+      adjuster.position.set(px, py - 0.05, -0.44);
+      this.weaponGroup.add(adjuster);
+      // 红色标识圆点
+      const redDot = new THREE.Mesh(new THREE.CircleGeometry(0.006, 8), redDotMat);
+      redDot.position.set(px + 0.036, py + 0.01, -0.46);
+      redDot.rotation.y = Math.PI / 2;
+      this.weaponGroup.add(redDot);
 
-      // 引擎后端（消音器）
-      const muffler = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.04, 0.035, 0.06, 8),
-        darkMat
+      // ====== 后U型主手柄（引擎上方，大U型环绕） ======
+      // 手柄竖杆（从引擎顶部向上）
+      const rearHandlePost = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.014, 0.014, 0.08, 8), gripMat
       );
-      muffler.rotation.x = Math.PI / 2;
-      muffler.position.set(0.32, -0.08, -0.55);
-      this.weaponGroup.add(muffler);
-
-      // 引擎顶部把手座
-      const topMount = new THREE.Mesh(
-        new THREE.BoxGeometry(0.08, 0.05, 0.08),
-        darkMat
+      rearHandlePost.position.set(px, py + 0.08, -0.41);
+      this.weaponGroup.add(rearHandlePost);
+      // U型弯管（水平向前弯曲，用 Torus 半环）
+      const rearHandleArc = new THREE.Mesh(
+        new THREE.TorusGeometry(0.04, 0.014, 6, 10, Math.PI), gripMat
       );
-      topMount.position.set(0.32, -0.05, -0.42);
-      this.weaponGroup.add(topMount);
-
-      // --- 后手柄（握持处，弧形上把手） ---
-      const rearHandleV = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.022, 0.022, 0.16, 8),
-        gripMat
+      rearHandleArc.rotation.x = Math.PI / 2;
+      rearHandleArc.position.set(px, py + 0.12, -0.45);
+      this.weaponGroup.add(rearHandleArc);
+      // 前竖杆（U型前端向下回到引擎）
+      const rearHandleFront = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.014, 0.014, 0.08, 8), gripMat
       );
-      rearHandleV.position.set(0.32, -0.22, -0.42);
-      this.weaponGroup.add(rearHandleV);
-
-      // 后手柄顶部横管
-      const rearHandleH = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.025, 0.025, 0.1, 8),
-        gripMat
+      rearHandleFront.position.set(px, py + 0.08, -0.49);
+      this.weaponGroup.add(rearHandleFront);
+      // 护手挡板（手柄顶部黑色网板）
+      const handGuard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.05, 0.012, 0.06), blackMat
       );
-      rearHandleH.rotation.z = Math.PI / 2;
-      rearHandleH.position.set(0.32, -0.12, -0.32);
-      this.weaponGroup.add(rearHandleH);
-
-      // 后手柄弯管连接
-      const handleCurveL = new THREE.Mesh(
-        new THREE.TorusGeometry(0.05, 0.022, 4, 8, Math.PI / 2),
-        gripMat
-      );
-      handleCurveL.rotation.y = Math.PI / 2;
-      handleCurveL.position.set(0.32, -0.17, -0.37);
-      this.weaponGroup.add(handleCurveL);
-      const handleCurveR = new THREE.Mesh(
-        new THREE.TorusGeometry(0.05, 0.022, 4, 8, Math.PI / 2),
-        gripMat
-      );
-      handleCurveR.rotation.y = Math.PI / 2;
-      handleCurveR.rotation.x = Math.PI;
-      handleCurveR.position.set(0.32, -0.17, -0.47);
-      this.weaponGroup.add(handleCurveR);
-
-      // 油门扳机（在握把内侧）
+      handGuard.position.set(px, py + 0.16, -0.45);
+      this.weaponGroup.add(handGuard);
+      // 油门扳机（握把内侧）
       const trigger = new THREE.Mesh(
-        new THREE.BoxGeometry(0.04, 0.025, 0.02),
-        darkMat
+        new THREE.BoxGeometry(0.025, 0.018, 0.012), darkMat
       );
-      trigger.position.set(0.32, -0.18, -0.48);
+      trigger.position.set(px, py + 0.05, -0.42);
       this.weaponGroup.add(trigger);
 
-      // --- 前手柄（D形辅助握把） ---
-      const frontHandleGrip = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.022, 0.022, 0.12, 8),
-        gripMat
+      // ====== 银色过渡连接块（引擎与导板之间） ======
+      const connector = new THREE.Mesh(
+        new THREE.BoxGeometry(0.05, 0.05, 0.03), silverMat
       );
-      frontHandleGrip.position.set(0.32, -0.18, -0.62);
-      this.weaponGroup.add(frontHandleGrip);
+      connector.position.set(px, py, -0.55);
+      this.weaponGroup.add(connector);
+      // 链锯调节旋钮（银色圆钮，连接块侧面）
+      const tensionKnob = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018, 0.018, 0.015, 10), chromeMat
+      );
+      tensionKnob.rotation.z = Math.PI / 2;
+      tensionKnob.position.set(px + 0.026, py + 0.015, -0.56);
+      this.weaponGroup.add(tensionKnob);
+      // 链轮盖（银色圆盘覆盖链条根部）
+      const sprocketCover = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.03, 0.01, 12), chromeMat
+      );
+      sprocketCover.rotation.z = Math.PI / 2;
+      sprocketCover.position.set(px + 0.03, py, -0.55);
+      this.weaponGroup.add(sprocketCover);
 
-      // 前手柄底部环
+      // ====== 前辅助手柄（导板根部下方，弯曲环状） ======
+      // 前手柄竖杆
+      const frontHandlePost = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.012, 0.012, 0.07, 8), gripMat
+      );
+      frontHandlePost.position.set(px, py - 0.06, -0.58);
+      this.weaponGroup.add(frontHandlePost);
+      // 前手柄环（D形弯管）
       const frontHandleRing = new THREE.Mesh(
-        new THREE.TorusGeometry(0.06, 0.018, 4, 8),
-        gripMat
+        new THREE.TorusGeometry(0.035, 0.012, 6, 10, Math.PI), gripMat
       );
-      frontHandleRing.rotation.y = Math.PI / 2;
-      frontHandleRing.position.set(0.32, -0.18, -0.62);
+      frontHandleRing.rotation.x = -Math.PI / 2;
+      frontHandleRing.position.set(px, py - 0.09, -0.60);
       this.weaponGroup.add(frontHandleRing);
+      // 前手柄竖杆2（环另一端回到导板）
+      const frontHandlePost2 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.012, 0.012, 0.05, 8), gripMat
+      );
+      frontHandlePost2.position.set(px, py - 0.07, -0.62);
+      this.weaponGroup.add(frontHandlePost2);
 
-      // --- 链条导板（长椭圆形金属板） ---
+      // ====== 导板（长条银色金属板，前端圆弧收尾） ======
       const barGroup = new THREE.Group();
-      // 导板主体：用扁长方体
+      // 导板主体（细长银色板）
       const bar = new THREE.Mesh(
-        new THREE.BoxGeometry(0.012, 0.018, 0.36),
-        metalMat
+        new THREE.BoxGeometry(0.01, 0.016, 0.34), silverMat
       );
       barGroup.add(bar);
-      // 导板尖端：圆头
+      // 导板尖端圆头
       const barTip = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.012, 0.012, 0.012, 8),
-        metalMat
+        new THREE.CylinderGeometry(0.009, 0.009, 0.01, 10), silverMat
       );
       barTip.rotation.x = Math.PI / 2;
-      barTip.position.set(0, 0, 0.18);
+      barTip.position.set(0, 0, 0.175);
       barGroup.add(barTip);
-      // 导板根部连接块
+      // 导板根部（连接块侧，略宽）
       const barRoot = new THREE.Mesh(
-        new THREE.BoxGeometry(0.02, 0.04, 0.03),
-        darkMat
+        new THREE.BoxGeometry(0.014, 0.024, 0.025), silverMat
       );
-      barRoot.position.set(0, 0, -0.19);
+      barRoot.position.set(0, 0, -0.18);
       barGroup.add(barRoot);
 
-      barGroup.position.set(0.32, -0.12, -0.58);
+      barGroup.position.set(px, py, -0.62);
       this.weaponGroup.add(barGroup);
       this._chainBar = barGroup;
 
-      // --- 链条（绕导板边缘的可见链） ---
-      this.chainMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(0.015, 0.008, 0.36),
-        chainMat
-      );
-      this.chainMesh.position.set(0.32, -0.108, -0.58);
-      this.weaponGroup.add(this.chainMesh);
-
-      // 链条上侧（紧贴导板顶部）
+      // ====== 黑色导锯链（环绕导板边缘） ======
+      // 链条上边
       const chainTop = new THREE.Mesh(
-        new THREE.BoxGeometry(0.015, 0.01, 0.34),
-        chainMat
+        new THREE.BoxGeometry(0.006, 0.008, 0.35), blackMat
       );
-      chainTop.position.set(0.32, -0.103, -0.58);
+      chainTop.position.set(px, py + 0.012, -0.62);
       this.weaponGroup.add(chainTop);
+      // 链条下边
+      const chainBottom = new THREE.Mesh(
+        new THREE.BoxGeometry(0.006, 0.008, 0.35), blackMat
+      );
+      chainBottom.position.set(px, py - 0.012, -0.62);
+      this.weaponGroup.add(chainBottom);
+      // 链条尖端弧
+      const chainTip = new THREE.Mesh(
+        new THREE.TorusGeometry(0.012, 0.004, 4, 8, Math.PI), blackMat
+      );
+      chainTip.rotation.y = Math.PI / 2;
+      chainTip.position.set(px, py, -0.62 + 0.175);
+      this.weaponGroup.add(chainTip);
+      // 链条颜色引用（用于激活时变色）
+      this.chainMesh = chainTop;
 
-      // --- 锯齿（沿链条顶部排列，模拟切割齿） ---
+      // ====== 锯齿（沿链条上方排列，尖锐切割齿） ======
       this.chainTeeth = [];
-      const numTeeth = 18;
+      const numTeeth = 16;
+      const toothSpacing = 0.32 / numTeeth;
       for (let i = 0; i < numTeeth; i++) {
         const tooth = new THREE.Mesh(
-          new THREE.ConeGeometry(0.008, 0.022, 4),
-          toothMat
+          new THREE.ConeGeometry(0.005, 0.016, 3), toothMat
         );
-        const zPos = -0.16 + (i / (numTeeth - 1)) * 0.32;
-        tooth.position.set(0.32, -0.092, -0.58 + zPos);
-        tooth.userData.phase = i * 0.5;
-        tooth.userData.baseZ = -0.58 + zPos;
+        const zPos = -0.16 + i * toothSpacing;
+        tooth.position.set(px, py + 0.018, -0.62 + zPos);
+        tooth.userData.baseZ = -0.62 + zPos;
+        tooth.userData.phase = i * 0.6;
         this.weaponGroup.add(tooth);
         this.chainTeeth.push(tooth);
       }
 
-      // --- 链轮盖（链条根部覆盖） ---
-      const sprocketCover = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.04, 0.04, 0.015, 10),
-        chromeMat
-      );
-      sprocketCover.rotation.x = Math.PI / 2;
-      sprocketCover.position.set(0.32, -0.12, -0.39);
-      this.weaponGroup.add(sprocketCover);
-
-      // --- 侧链张紧旋钮 ---
-      const tensioner = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.015, 0.015, 0.02, 6),
-        chromeMat
-      );
-      tensioner.rotation.z = Math.PI / 2;
-      tensioner.position.set(0.28, -0.12, -0.4);
-      this.weaponGroup.add(tensioner);
-
-      // --- 红色指示灯（开机状态） ---
+      // ====== 红色LED指示灯 ======
       const led = new THREE.Mesh(
-        new THREE.SphereGeometry(0.008, 6, 6),
+        new THREE.SphereGeometry(0.005, 6, 6),
         new THREE.MeshBasicMaterial({ color: 0xFF0000 })
       );
-      led.position.set(0.32, -0.07, -0.38);
+      led.position.set(px + 0.036, py + 0.035, -0.48);
       this.weaponGroup.add(led);
       this._chainsawLED = led;
     }
@@ -1673,27 +1685,28 @@ export class WeaponRenderer {
 
     // === 链锯链条转动动画 ===
     if (this.currentWeapon === WeaponType.CHAINSAW && this.chainTeeth) {
-      const spinSpeed = this.chainSawActive ? 30 : 0;
+      const spinSpeed = this.chainSawActive ? 35 : 0;
       this.chainSawSpin = (this.chainSawSpin || 0) + dt * spinSpeed;
-      // 链条沿导板线性运动（模拟链锯沿导板移动）
-      const chainLen = 0.32; // 导板长度
-      const speed = this.chainSawSpin;
+      // 锯齿沿导板 Z 轴线性滑动，到达末端回绕（模拟链条绕导板循环）
+      const chainLen = 0.32;
+      const slideSpeed = this.chainSawSpin * 0.012;
       for (const tooth of this.chainTeeth) {
-        const baseZ = tooth.userData.baseZ;
-        // 顶部链：沿Z方向匀速移动，超出范围则回绕
-        let offset = ((speed * 0.01 + tooth.userData.phase * 0.02) % chainLen);
-        if (offset < 0) offset += chainLen;
-        tooth.position.z = -0.58 - 0.16 + offset;
-        // 齿向上抖动（模拟链锯切割振动）
-        tooth.position.y = -0.092 + (this.chainSawActive ? Math.sin(speed * 2 + tooth.userData.phase) * 0.003 : 0);
+        let z = tooth.userData.baseZ + slideSpeed + tooth.userData.phase * 0.015;
+        // 回绕到起点
+        z = ((z + 0.16) % chainLen + chainLen) % chainLen - 0.16;
+        tooth.position.z = z;
+        // 激活时微小振动（模拟切割）
+        if (this.chainSawActive) {
+          tooth.position.y = -0.12 + 0.018 + Math.sin(this.chainSawSpin * 3 + tooth.userData.phase) * 0.002;
+        }
       }
-      // 链条颜色变化
+      // 链条颜色：激活时变金黄
       if (this.chainMesh) {
-        this.chainMesh.material.color.setHex(this.chainSawActive ? 0xFFF59D : 0x607D8B);
+        this.chainMesh.material.color.setHex(this.chainSawActive ? 0xFDD835 : 0x0a0a0a);
       }
       // LED 闪烁
       if (this._chainsawLED) {
-        const blink = this.chainSawActive ? (0.5 + Math.sin(performance.now() * 0.02) * 0.5) : 0.3;
+        const blink = this.chainSawActive ? (0.5 + Math.sin(performance.now() * 0.02) * 0.5) : 0.2;
         this._chainsawLED.material.color.setRGB(blink, 0, 0);
       }
     }
