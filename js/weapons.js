@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=84';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=85';
 
 /* ============================================
    武器类型定义
@@ -285,18 +285,6 @@ class Bullet {
       origin.y + direction.y,
       origin.z + direction.z
     );
-
-    // 发光效果（自动武器不添加发光，减少视觉混乱）
-    if (!weaponDef.auto) {
-      const glowMat = new THREE.MeshBasicMaterial({
-        color: weaponDef.bulletColor,
-        transparent: true,
-        opacity: 0.3,
-      });
-      const glowGeo = new THREE.BoxGeometry(size * 2.5, size * 2.5, size * 4);
-      this.glow = new THREE.Mesh(glowGeo, glowMat);
-      this.mesh.add(this.glow);
-    }
 
     scene.add(this.mesh);
   }
