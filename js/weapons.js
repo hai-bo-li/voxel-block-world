@@ -1347,7 +1347,7 @@ export class WeaponManager {
     let prevY = Math.floor(origin.y);
     let prevZ = Math.floor(origin.z);
 
-    // 检查怪物命中（使用点到射线最近距离，而非步进点距离）
+    // 检查怪物命中（使用点到射线最近距离 + 体型中心点，与子弹检测一致）
     if (this.animalManager) {
       const range = def.range;
       for (const animal of this.animalManager.animals) {
@@ -1355,24 +1355,25 @@ export class WeaponManager {
         const ap = animal.position;
         const cw = animal.collisionWidth || 0.7;
         const ch = animal.collisionHeight || 1.0;
-        // 计算怪物中心点到射线的最近距离（点到射线投影）
-        const toAnimal = new THREE.Vector3(ap.x - origin.x, ap.y - origin.y, ap.z - origin.z);
+        // 使用体型中心点（脚部上方 ch/2 处），而非脚底位置
+        const bodyCenter = new THREE.Vector3(ap.x, ap.y + ch * 0.5, ap.z);
+        // 计算体型中心点到射线的最近距离（点到射线投影）
+        const toAnimal = bodyCenter.clone().sub(origin);
         const projLen = toAnimal.dot(dir); // 沿射线方向的投影距离
         if (projLen < 0 || projLen > range) continue; // 不在射程范围内
-        // 计算垂直距离
+        // 计算垂直距离（射线到体型中心的距离）
         const closestPoint = origin.clone().add(dir.clone().multiplyScalar(projLen));
-        const hitPos = closestPoint.clone();
-        const perpDist = hitPos.distanceTo(ap);
-        // 命中判定：垂直距离 < (碰撞宽度 + 0.5)，且高度在怪物身体范围内
-        const hitRadius = cw + 0.5;
-        const yMin = ap.y - 0.3;
-        const yMax = ap.y + ch + 0.3;
-        if (perpDist < hitRadius && hitPos.y >= yMin && hitPos.y <= yMax) {
+        const perpDist = closestPoint.distanceTo(bodyCenter);
+        // 命中判定：垂直距离 < 碰撞半径，且射线最近点高度在怪物身体范围内
+        const hitRadius = Math.max(cw, ch * 0.5) + 0.2;
+        const yMin = ap.y;         // 脚底（不低于地面）
+        const yMax = ap.y + ch;    // 体顶
+        if (perpDist < hitRadius && closestPoint.y >= yMin && closestPoint.y <= yMax) {
           // 先检查方块阻挡（从相机到怪物之间的方块）
           let blocked = false;
-          const blockStep = 0.2; // 稍微增大步进以提高性能
+          const blockStep = 0.2;
           const blockMaxSteps = Math.floor(projLen / blockStep);
-          for (let j = 1; j < blockMaxSteps; j++) { // j 从 1 开始，避免检测到玩家脚下的方块
+          for (let j = 1; j < blockMaxSteps; j++) {
             const bt = j * blockStep;
             const bx = Math.floor(origin.x + dir.x * bt);
             const by = Math.floor(origin.y + dir.y * bt);
@@ -1386,7 +1387,7 @@ export class WeaponManager {
           }
           // 只有没有被阻挡时才命中怪物
           if (!blocked) {
-            const isHeadshot = hitPos.y >= ap.y + ch * 0.7;
+            const isHeadshot = closestPoint.y >= ap.y + ch * 0.7;
             animal.takeDamage(def.damage, { position: this.camera.position.clone() }, !!def.auto, false, isHeadshot);
             this.onEnemyHit?.(animal, isHeadshot);
             if (!animal.alive) this.onEnemyKill?.(animal);
