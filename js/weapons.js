@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=83';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=84';
 
 /* ============================================
    武器类型定义
@@ -1121,7 +1121,7 @@ export class WeaponRenderer {
 
       // 整体参数：链锯水平放置，Z轴为长轴（-Z = 前方导板端，+Z = 后方引擎端）
       // 基准位置在玩家右手前方
-      const px = 0.18, py = -0.12;
+      const px = 0.22, py = -0.22;
 
       // ====== 发动机壳体（右后，方正橙色主体） ======
       // 主体方块
