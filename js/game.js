@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=74';
-import { AnimalManager } from './animals.js?v=74';
+} from './voxel.js?v=75';
+import { AnimalManager } from './animals.js?v=75';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=74';
-import { audio } from './audio.js?v=74';
+} from './weapons.js?v=75';
+import { audio } from './audio.js?v=75';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1627,6 +1627,11 @@ class Game {
     this._updateWaveInfo();
   }
 
+
+	_runTutorial() {
+		this.tutorialOverlayShown = false;
+	}
+
   /** 新手引导 */
   _updateTutorial(dt) {
     if (this.tutorialOverlayShown) return;
@@ -1643,8 +1648,6 @@ class Game {
       { time: 2.5, text: '滚轮/数字键 切换武器 | R 换弹 | E/B 背包' },
       { time: 3.5, text: 'G 扔手榴弹 | P 操作说明 | V 任务列表' },
       { time: 4.5, text: '目标：消灭所有机器人，生存下去！' },
-    ];
-      { time: 4.5, text: '消灭机器人，生存下去！' },
     ];
 
     const currentStep = steps.findIndex((s, i) => {
