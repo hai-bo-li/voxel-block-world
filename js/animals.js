@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=85';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=85';
-import { audio } from './audio.js?v=85';
+import { BlockType, isSolid } from './voxel.js?v=86';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=86';
+import { audio } from './audio.js?v=86';
 
 /* ============================================
    常量配置
@@ -205,10 +205,12 @@ class Robot {
       }
     }
 
-    // 受击粒子
-    const hitPos = this.position.clone();
-    hitPos.y += 0.5;
-    spawnHitEffect(this.scene, hitPos, 0xFF4444, isAuto);
+    // 受击粒子（自动武器不生成，避免连射闪烁）
+    if (!isAuto) {
+      const hitPos = this.position.clone();
+      hitPos.y += 0.5;
+      spawnHitEffect(this.scene, hitPos, 0xFF4444, false);
+    }
 
     // 被攻击时进入追踪状态
     if (this.state === 'idle' || this.state === 'wander') {
