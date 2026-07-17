@@ -4,29 +4,29 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=73';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=73';
-import { audio } from './audio.js?v=73';
+import { BlockType, isSolid } from './voxel.js?v=74';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=74';
+import { audio } from './audio.js?v=74';
 
 /* ============================================
    常量配置
    ============================================ */
-const SCOUT_COUNT = 4;
-const HEAVY_COUNT = 2;
-const FLYER_COUNT = 2;
+const SCOUT_COUNT = 5;
+const HEAVY_COUNT = 3;
+const FLYER_COUNT = 3;
 const BRUTE_COUNT = 2;
-const SPIDER_COUNT = 3;
-const MOBILE_SCOUT_COUNT = 2;
-const MOBILE_HEAVY_COUNT = 1;
-const MOBILE_FLYER_COUNT = 1;
+const SPIDER_COUNT = 4;
+const MOBILE_SCOUT_COUNT = 3;
+const MOBILE_HEAVY_COUNT = 2;
+const MOBILE_FLYER_COUNT = 2;
 const MOBILE_BRUTE_COUNT = 1;
 const MOBILE_SPIDER_COUNT = 2;
-const SPAWN_RADIUS = 25;
+const SPAWN_RADIUS = 45;
 const MIN_SPAWN_DIST = 4;
-const WANDER_RANGE = 20;
+const WANDER_RANGE = 35;
 
 // AI 常量
-const DETECTION_RANGE = 25;        // 检测玩家的距离
+const DETECTION_RANGE = 35;        // 检测玩家的距离
 const ATTACK_RANGE_MELEE = 2.0;    // 近战攻击距离
 const ATTACK_RANGE_RANGED = 20;    // 远程攻击距离
 const CHASE_SPEED_MULT = 1.3;      // 追击速度倍率（降低）

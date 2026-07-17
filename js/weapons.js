@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=73';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=74';
 
 /* ============================================
    武器类型定义
@@ -1347,6 +1347,53 @@ export class WeaponManager {
     let prevY = Math.floor(origin.y);
     let prevZ = Math.floor(origin.z);
 
+    // 检查怪物命中（使用点到射线最近距离，而非步进点距离）
+    if (this.animalManager) {
+      const range = def.range;
+      for (const animal of this.animalManager.animals) {
+        if (!animal.alive) continue;
+        const ap = animal.position;
+        const cw = animal.collisionWidth || 0.7;
+        const ch = animal.collisionHeight || 1.0;
+        // 计算怪物中心点到射线的最近距离（点到射线投影）
+        const toAnimal = new THREE.Vector3(ap.x - origin.x, ap.y - origin.y, ap.z - origin.z);
+        const projLen = toAnimal.dot(dir); // 沿射线方向的投影距离
+        if (projLen < 0 || projLen > range) continue; // 不在射程范围内
+        // 计算垂直距离
+        const closestPoint = origin.clone().add(dir.clone().multiplyScalar(projLen));
+        const hitPos = closestPoint.clone();
+        const perpDist = hitPos.distanceTo(ap);
+        // 命中判定：垂直距离 < (碰撞宽度 + 0.5)，且高度在怪物身体范围内
+        const hitRadius = cw + 0.5;
+        const yMin = ap.y - 0.3;
+        const yMax = ap.y + ch + 0.3;
+        if (perpDist < hitRadius && hitPos.y >= yMin && hitPos.y <= yMax) {
+          const isHeadshot = hitPos.y >= ap.y + ch * 0.7;
+          animal.takeDamage(def.damage, { position: this.camera.position.clone() }, !!def.auto, false, isHeadshot);
+          this.onEnemyHit?.(animal, isHeadshot);
+          if (!animal.alive) this.onEnemyKill?.(animal);
+          // 检查方块（射线到怪物之间是否有方块阻挡）
+          let blocked = false;
+          const blockStep = 0.1;
+          const blockMaxSteps = Math.floor(projLen / blockStep);
+          for (let j = 1; j <= blockMaxSteps; j++) {
+            const bt = j * blockStep;
+            const bx = Math.floor(origin.x + dir.x * bt);
+            const by = Math.floor(origin.y + dir.y * bt);
+            const bz = Math.floor(origin.z + dir.z * bt);
+            const block = this.world.getBlock(bx, by, bz);
+            if (isSolid(block)) {
+              this._damageBlock(bx, by, bz, block, def.blockDamage);
+              blocked = true;
+              break;
+            }
+          }
+          return true;
+        }
+      }
+    }
+
+    // 没命中怪物，检查方块破坏
     for (let i = 0; i < maxSteps; i++) {
       const t = i * step;
       const x = Math.floor(origin.x + dir.x * t);
@@ -1359,22 +1406,6 @@ export class WeaponManager {
       if (isSolid(block)) {
         this._damageBlock(x, y, z, block, def.blockDamage);
         return true;
-      }
-
-      if (this.animalManager) {
-        const hitPos = new THREE.Vector3(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t);
-        for (const animal of this.animalManager.animals) {
-          if (!animal.alive) continue;
-          const dist = hitPos.distanceTo(animal.position);
-          if (dist < 1.2) {
-            const h = animal.collisionHeight || 1.0;
-            const isHeadshot = hitPos.y >= animal.position.y + h * 0.7;
-            animal.takeDamage(def.damage, { position: this.camera.position.clone() }, !!def.auto, false, isHeadshot);
-            this.onEnemyHit?.(animal, isHeadshot);
-            if (!animal.alive) this.onEnemyKill?.(animal);
-            return true;
-          }
-        }
       }
 
       prevX = x;

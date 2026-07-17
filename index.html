@@ -8,7 +8,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>像素方块世界</title>
-  <link rel="stylesheet" href="/styles/main.css?v=73" />
+  <link rel="stylesheet" href="/styles/main.css?v=74" />
   <!-- 使用 importmap 引入 Three.js ES Module -->
   <script type="importmap">
   {
@@ -74,22 +74,32 @@
   <div id="startScreen">
     <div class="start-title">像素方块世界</div>
     <div class="start-subtitle">VOXEL BLOCK WORLD</div>
+    <div class="game-objective">
+      <div class="objective-title">游戏目标</div>
+      <div class="objective-desc">消灭所有入侵的机器人，保卫 Li Hai Bo 立墙！</div>
+      <div class="objective-tips">
+        <div>· 击杀怪物完成任务，解锁更多武器</div>
+        <div>· 按 V 查看任务进度，P 查看操作说明</div>
+        <div>· 使用手榴弹（按 8）应对密集敌人</div>
+        <div>· 狙击枪右键开镜，头部命中双倍伤害</div>
+      </div>
+    </div>
     <div class="start-hint">点击开始游戏</div>
     <div class="controls-info desktop-only">
       <h3>操作说明</h3>
       <div class="control-row"><span class="key">W A S D</span><span>移动</span></div>
+      <div class="control-row"><span class="key">Shift</span><span>加速移动</span></div>
       <div class="control-row"><span class="key">鼠标</span><span>视角旋转</span></div>
       <div class="control-row"><span class="key">空格</span><span>跳跃</span></div>
-      <div class="control-row"><span class="key">左键</span><span>攻击/放置方块</span></div>
-      <div class="control-row"><span class="key">右键</span><span>破坏方块</span></div>
-      <div class="control-row"><span class="key">1-9</span><span>快捷栏切换</span></div>
+      <div class="control-row"><span class="key">左键</span><span>攻击/射击</span></div>
+      <div class="control-row"><span class="key">右键</span><span>瞄准/破坏方块</span></div>
+      <div class="control-row"><span class="key">1-9</span><span>切换武器/物品</span></div>
       <div class="control-row"><span class="key">E</span><span>打开背包</span></div>
       <div class="control-row"><span class="key">R</span><span>装填弹药</span></div>
-      <div class="control-row"><span class="key">滚轮</span><span>切换物品</span></div>
+      <div class="control-row"><span class="key">P</span><span>操作说明</span></div>
+      <div class="control-row"><span class="key">V</span><span>任务列表</span></div>
+      <div class="control-row"><span class="key">Tab</span><span>设置</span></div>
       <div class="control-row"><span class="key">ESC</span><span>暂停</span></div>
-      <div class="control-row"><span class="key">= / Ctrl+滚轮上</span><span>放大画面</span></div>
-      <div class="control-row"><span class="key">- / Ctrl+滚轮下</span><span>缩小画面</span></div>
-      <div class="control-row"><span class="key">0</span><span>重置视野</span></div>
     </div>
   </div>
 
@@ -202,6 +212,6 @@
   <!-- 错误显示区域 -->
   <div id="errorOverlay" style="position:fixed;top:0;left:0;right:0;background:red;color:white;padding:15px;font-size:16px;z-index:99999;display:none;font-family:monospace;white-space:pre-wrap;max-height:50vh;overflow:auto;"></div>
   <!-- 游戏主模块 -->
-  <script type="module" src="/js/game.js?v=73"></script>
+  <script type="module" src="/js/game.js?v=74"></script>
 </body>
 </html>

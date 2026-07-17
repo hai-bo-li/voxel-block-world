@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=73';
-import { AnimalManager } from './animals.js?v=73';
+} from './voxel.js?v=74';
+import { AnimalManager } from './animals.js?v=74';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=73';
-import { audio } from './audio.js?v=73';
+} from './weapons.js?v=74';
+import { audio } from './audio.js?v=74';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -82,7 +82,9 @@ class Player {
   takeDamage(amount, fromPosition, isExplosion = false) {
     if (!this.alive || this.invincibleTimer > 0) return;
 
-    this.hp = Math.max(0, this.hp - amount);
+    if (typeof amount !== 'number' || isNaN(amount) || amount <= 0 || !this.alive) return;
+    if (this.invincibleTimer > 0) return;
+    this.hp = Math.max(0, Math.min(this.maxHP, this.hp - amount));
     this.invincibleTimer = 0.3; // 0.3秒无敌
     this.hitFlashTimer = 0.2;
     this._lastDmgFrom = fromPosition ? fromPosition.clone() : null;
@@ -1352,7 +1354,9 @@ class Game {
   /** 更新血条 */
   _updateHealthBar(hp, maxHP) {
     if (!this._healthFillEl) return;
-    const ratio = Math.max(0, hp / maxHP);
+    if (typeof hp !== 'number' || isNaN(hp)) hp = 0;
+    if (typeof maxHP !== 'number' || isNaN(maxHP) || maxHP <= 0) maxHP = 100;
+    const ratio = Math.max(0, Math.min(1, hp / maxHP));
     this._healthFillEl.style.width = `${ratio * 100}%`;
 
     if (ratio > 0.6) {
@@ -1364,7 +1368,7 @@ class Game {
     }
 
     if (this._healthTextEl) {
-      this._healthTextEl.textContent = Math.ceil(hp);
+      this._healthTextEl.textContent = Math.max(0, Math.ceil(hp));
     }
   }
 
@@ -1634,10 +1638,12 @@ class Game {
 
     // 缩短教程时间，5秒内全部显示完毕
     const steps = [
-      { time: 0.5, text: 'WASD 移动 | 鼠标控制视角' },
-      { time: 1.5, text: '左键攻击 | 右键瞄准/破坏方块' },
-      { time: 2.5, text: '滚轮/数字键 切换武器 | Q 快速切换' },
-      { time: 3.5, text: 'R 换弹 | E/B 打开背包' },
+      { time: 0.5, text: 'WASD 移动 | Shift 加速 | 鼠标控制视角' },
+      { time: 1.5, text: '左键攻击/射击 | 右键瞄准/破坏方块' },
+      { time: 2.5, text: '滚轮/数字键 切换武器 | R 换弹 | E/B 背包' },
+      { time: 3.5, text: 'G 扔手榴弹 | P 操作说明 | V 任务列表' },
+      { time: 4.5, text: '目标：消灭所有机器人，生存下去！' },
+    ];
       { time: 4.5, text: '消灭机器人，生存下去！' },
     ];
 
@@ -2060,7 +2066,7 @@ class Game {
             questPanel.style.display = 'none';
           } else {
             questPanel.style.display = 'block';
-            this._updateQuestPanel();
+            this._renderQuests();
           }
         }
       }
@@ -2195,6 +2201,7 @@ class Game {
           this.camera.position.z + lookDir.z
         );
         requestLock();
+        this._runTutorial();
       });
 
       this.ui.pauseScreen.addEventListener('click', requestLock);
@@ -2218,6 +2225,7 @@ class Game {
           this.camera.position.z + lookDir.z
         );
         this._showGameUI(true);
+        this._runTutorial();
       });
 
       this.ui.pauseScreen.addEventListener('click', () => {
@@ -2277,6 +2285,7 @@ class Game {
 
   _adjustFOV(delta) {
     this.fov = Math.max(this.fovMin, Math.min(this.fovMax, this.fov + delta));
+    this.targetFov = this.fov;
     this.camera.fov = this.fov;
     this.camera.updateProjectionMatrix();
     this._showFOVHint();
@@ -2406,6 +2415,7 @@ class Game {
         const v = parseInt(fovSlider.value);
         this.fov = v;
         this.defaultFov = v;
+        this.targetFov = v;
         this.camera.fov = v;
         this.camera.updateProjectionMatrix();
         if (fovVal) fovVal.textContent = v;
