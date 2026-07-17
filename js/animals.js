@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=80';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=80';
-import { audio } from './audio.js?v=80';
+import { BlockType, isSolid } from './voxel.js?v=81';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=81';
+import { audio } from './audio.js?v=81';
 
 /* ============================================
    常量配置
@@ -66,6 +66,9 @@ class Robot {
     // 碰撞体
     this.collisionWidth = 0.7;
     this.collisionHeight = 0.9;
+
+    // 爆头区域：头部底部Y偏移（相对脚底），子弹/近战命中点Y >= 此值则为爆头
+    this.headY = 0.7;
 
     // 血条高度（子类可覆盖）
     this.healthBarY = 1.6;
@@ -709,6 +712,7 @@ class ScoutBot extends Robot {
     super(scene, world, x, y, z);
     this.collisionWidth = 0.7;
     this.collisionHeight = 1.0;
+    this.headY = 0.75;
     this.wanderSpeed = 0.8;
     this.turnSpeed = 2.0;
     this.antennaAngle = 0;
@@ -809,6 +813,7 @@ class HeavyBot extends Robot {
     super(scene, world, x, y, z);
     this.collisionWidth = 0.85;
     this.collisionHeight = 1.15;
+    this.headY = 0.85;
     this.wanderSpeed = 0.5;
     this.turnSpeed = 1.5;
     this.antennaAngle = 0;
@@ -961,6 +966,7 @@ export class FlyerBot extends Robot {
     this.attackTimer = 0;
     this.collisionWidth = 0.8;
     this.collisionHeight = 0.9;
+    this.headY = 0.15;
     this.healthBarY = 0.7;
     this._repositionHealthBar();
     this._buildModel();
@@ -1110,6 +1116,7 @@ export class BruteBot extends Robot {
     this.height = 1.6;
     this.collisionWidth = 1.1;
     this.collisionHeight = 1.8;
+    this.headY = 1.45;
     this.healthBarY = 2.1;
     this._repositionHealthBar();
     this._buildModel();
@@ -1222,6 +1229,7 @@ export class SpiderBot extends Robot {
     this.height = 0.5;
     this.collisionWidth = 0.6;
     this.collisionHeight = 0.6;
+    this.headY = 0.3;
     this._legPhase = 0;
     this.healthBarY = 0.7;
     this._repositionHealthBar();
