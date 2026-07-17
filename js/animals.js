@@ -1220,7 +1220,7 @@ export class SpiderBot extends Robot {
     this.attackCooldown = 1.6;
     this.attackTimer = 0;
     this.height = 0.5;
-    this.collisionWidth = 0.9;
+    this.collisionWidth = 0.6;
     this.collisionHeight = 0.6;
     this._legPhase = 0;
     this.healthBarY = 0.7;

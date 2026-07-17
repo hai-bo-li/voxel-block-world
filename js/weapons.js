@@ -1368,15 +1368,11 @@ export class WeaponManager {
         const yMin = ap.y - 0.3;
         const yMax = ap.y + ch + 0.3;
         if (perpDist < hitRadius && hitPos.y >= yMin && hitPos.y <= yMax) {
-          const isHeadshot = hitPos.y >= ap.y + ch * 0.7;
-          animal.takeDamage(def.damage, { position: this.camera.position.clone() }, !!def.auto, false, isHeadshot);
-          this.onEnemyHit?.(animal, isHeadshot);
-          if (!animal.alive) this.onEnemyKill?.(animal);
-          // 检查方块（射线到怪物之间是否有方块阻挡）
+          // 先检查方块阻挡（从相机到怪物之间的方块）
           let blocked = false;
-          const blockStep = 0.1;
+          const blockStep = 0.2; // 稍微增大步进以提高性能
           const blockMaxSteps = Math.floor(projLen / blockStep);
-          for (let j = 1; j <= blockMaxSteps; j++) {
+          for (let j = 1; j < blockMaxSteps; j++) { // j 从 1 开始，避免检测到玩家脚下的方块
             const bt = j * blockStep;
             const bx = Math.floor(origin.x + dir.x * bt);
             const by = Math.floor(origin.y + dir.y * bt);
@@ -1388,7 +1384,14 @@ export class WeaponManager {
               break;
             }
           }
-          return true;
+          // 只有没有被阻挡时才命中怪物
+          if (!blocked) {
+            const isHeadshot = hitPos.y >= ap.y + ch * 0.7;
+            animal.takeDamage(def.damage, { position: this.camera.position.clone() }, !!def.auto, false, isHeadshot);
+            this.onEnemyHit?.(animal, isHeadshot);
+            if (!animal.alive) this.onEnemyKill?.(animal);
+            return true;
+          }
         }
       }
     }
