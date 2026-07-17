@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=79';
-import { AnimalManager } from './animals.js?v=79';
+} from './voxel.js?v=80';
+import { AnimalManager } from './animals.js?v=80';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=79';
-import { audio } from './audio.js?v=79';
+} from './weapons.js?v=80';
+import { audio } from './audio.js?v=80';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -644,17 +644,30 @@ class TouchController {
         if (wDef && wDef.auto) {
           this.game._isFiring = true;
         }
+        // 加特林/电锯：长按持续激活
+        if (wType === WeaponType.GATLING) {
+          this.game.weaponManager._isGatlingFiring = true;
+        }
+        if (wType === WeaponType.CHAINSAW) {
+          this.game.weaponManager._isChainsawFiring = true;
+        }
         _flashBtn(btnAttack);
       });
       btnAttack.addEventListener('pointerup', (e) => {
         e.preventDefault();
         this.game._isFiring = false;
+        this.game.weaponManager._isGatlingFiring = false;
+        this.game.weaponManager._isChainsawFiring = false;
       });
       btnAttack.addEventListener('pointercancel', (e) => {
         this.game._isFiring = false;
+        this.game.weaponManager._isGatlingFiring = false;
+        this.game.weaponManager._isChainsawFiring = false;
       });
       btnAttack.addEventListener('pointerleave', (e) => {
         this.game._isFiring = false;
+        this.game.weaponManager._isGatlingFiring = false;
+        this.game.weaponManager._isChainsawFiring = false;
         _attackHoldTimer = null;
       });
     }
@@ -2094,6 +2107,13 @@ class Game {
         if (currentItem && currentItem.type === 'weapon') {
           this._weaponAttack();
           this._isFiring = true;
+          // 设置加特林/电锯状态
+          if (currentItem.weaponType === WeaponType.GATLING) {
+            this.weaponManager._isGatlingFiring = true;
+          }
+          if (currentItem.weaponType === WeaponType.CHAINSAW) {
+            this.weaponManager._isChainsawFiring = true;
+          }
         } else {
           this.player.placeBlock();
           this.weaponManager.triggerPlace();
@@ -2121,6 +2141,10 @@ class Game {
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) {
         this._isFiring = false;
+        if (this.weaponManager) {
+          this.weaponManager._isGatlingFiring = false;
+          this.weaponManager._isChainsawFiring = false;
+        }
       } else if (e.button === 2) {
         this._rightMouseDown = false;
         // 右键松开：如果手持手榴弹则投掷
@@ -2308,6 +2332,12 @@ class Game {
     if (!wDef) return;
 
     if (wDef.type === 'ranged') {
+      // 加特林预热中不射击
+      if (weaponType === WeaponType.GATLING) {
+        const shot = this.weaponManager.shoot(weaponType, this.player);
+        if (shot) audio.smg(); // 预热完成后发射时播放音效
+        return;
+      }
       // 换弹或冷却中不射击也不播放音效
       if (this.weaponManager.isReloading || this.weaponManager.cooldownTimer > 0) return;
       const shot = this.weaponManager.shoot(weaponType, this.player);
@@ -2322,6 +2352,10 @@ class Game {
         audio.shotgun();
       } else if (weaponType === WeaponType.SMG) {
         audio.smg();
+      } else if (weaponType === WeaponType.ASSAULT) {
+        audio.smg();
+      } else if (weaponType === WeaponType.ROCKET) {
+        audio.shotgun(); // 火箭炮发射音效
       } else {
         audio.shoot(pitchMap[weaponType] || 800);
       }
@@ -2572,6 +2606,16 @@ class Game {
             if (wDef && wDef.auto) {
               this._weaponAttack();
             }
+          }
+        }
+
+        // 电锯：按住攻击键时持续造成近战伤害
+        if (this.weaponManager._isChainsawFiring) {
+          const currentItem = this.inventory.getCurrentItem();
+          if (currentItem && currentItem.type === 'weapon' && currentItem.weaponType === WeaponType.CHAINSAW) {
+            this.weaponManager.meleeAttack(WeaponType.CHAINSAW, this.player);
+          } else {
+            this.weaponManager._isChainsawFiring = false;
           }
         }
 

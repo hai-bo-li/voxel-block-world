@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=79';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=80';
 
 /* ============================================
    武器类型定义
@@ -410,38 +410,95 @@ class Bullet {
     const radius = this.weaponDef.blastRadius || 4;
     const blastDamage = this.weaponDef.blastDamage || 30;
     const directDamage = this.weaponDef.damage || 40;
+    if (!this.scene._particles) this.scene._particles = [];
 
-    // 爆炸视觉特效
-    const colors = [0xFF6D00, 0xFFAB00, 0xFF3D00];
-    for (let i = 0; i < 20; i++) {
-      const size = 0.1 + Math.random() * 0.2;
+    // === 1. 火焰碎片粒子（大量小方块向外飞溅） ===
+    const fireColors = [0xFF6D00, 0xFFAB00, 0xFF3D00, 0xFFD600, 0xFF5252];
+    for (let i = 0; i < 35; i++) {
+      const size = 0.08 + Math.random() * 0.18;
       const geo = new THREE.BoxGeometry(size, size, size);
-      const mat = new THREE.MeshBasicMaterial({ color: colors[i % 3] });
-      const particle = new THREE.Mesh(geo, mat);
-      particle.position.copy(pos);
-      this.scene.add(particle);
-      const vel = new THREE.Vector3(
-        (Math.random() - 0.5) * 10,
-        Math.random() * 8 + 2,
-        (Math.random() - 0.5) * 10
+      const mat = new THREE.MeshBasicMaterial({ color: fireColors[i % fireColors.length] });
+      const p = new THREE.Mesh(geo, mat);
+      p.position.copy(pos);
+      this.scene.add(p);
+      const ang = Math.random() * Math.PI * 2;
+      const elev = Math.random() * Math.PI * 0.7;
+      const spd = 4 + Math.random() * 10;
+      p._vel = new THREE.Vector3(
+        Math.cos(ang) * Math.cos(elev) * spd,
+        Math.sin(elev) * spd + 2,
+        Math.sin(ang) * Math.cos(elev) * spd
       );
-      particle._vel = vel;
-      particle._life = 0.5 + Math.random() * 0.4;
-      if (!this.scene._particles) this.scene._particles = [];
-      this.scene._particles.push(particle);
+      p._life = 0.4 + Math.random() * 0.6;
+      p._gravity = 12;
+      p._shrink = true;
+      this.scene._particles.push(p);
     }
 
-    // 爆炸光球
-    const lightGeo = new THREE.BoxGeometry(radius * 0.6, radius * 0.6, radius * 0.6);
-    const lightMat = new THREE.MeshBasicMaterial({ color: 0xFF6D00, transparent: true, opacity: 0.4 });
-    const lightMesh = new THREE.Mesh(lightGeo, lightMat);
-    lightMesh.position.copy(pos);
-    this.scene.add(lightMesh);
-    lightMesh._vel = new THREE.Vector3(0, 0, 0);
-    lightMesh._life = 0.3;
-    lightMesh._fadeOut = true;
-    if (!this.scene._particles) this.scene._particles = [];
-    this.scene._particles.push(lightMesh);
+    // === 2. 冲击波环（扩散圆环） ===
+    const ringGeo = new THREE.RingGeometry(0.1, 0.3, 24);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xFFAB00, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.copy(pos);
+    ring.rotation.x = -Math.PI / 2;
+    this.scene.add(ring);
+    ring._isShockwave = true;
+    ring._maxRadius = radius * 1.5;
+    ring._life = 0.4;
+    this.scene._particles.push(ring);
+
+    // === 3. 烟雾粒子（灰色慢速上升） ===
+    for (let i = 0; i < 12; i++) {
+      const size = 0.2 + Math.random() * 0.3;
+      const geo = new THREE.BoxGeometry(size, size, size);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x616161, transparent: true, opacity: 0.6 });
+      const p = new THREE.Mesh(geo, mat);
+      p.position.copy(pos);
+      p.position.x += (Math.random() - 0.5) * 2;
+      p.position.z += (Math.random() - 0.5) * 2;
+      this.scene.add(p);
+      p._vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        1.5 + Math.random() * 2,
+        (Math.random() - 0.5) * 2
+      );
+      p._life = 0.8 + Math.random() * 0.6;
+      p._gravity = -3;
+      p._fadeOpacity = true;
+      this.scene._particles.push(p);
+    }
+
+    // === 4. 爆炸核心光球（快速膨胀后消失） ===
+    const coreGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xFFD600, transparent: true, opacity: 0.9 });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.position.copy(pos);
+    this.scene.add(core);
+    core._isExplosionCore = true;
+    core._maxSize = radius * 0.8;
+    core._life = 0.25;
+    this.scene._particles.push(core);
+
+    // === 5. 火花碎片（亮黄色快速飞溅） ===
+    for (let i = 0; i < 20; i++) {
+      const size = 0.04 + Math.random() * 0.06;
+      const geo = new THREE.BoxGeometry(size, size, size);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xFFEE58 });
+      const p = new THREE.Mesh(geo, mat);
+      p.position.copy(pos);
+      this.scene.add(p);
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 8 + Math.random() * 14;
+      p._vel = new THREE.Vector3(
+        Math.cos(ang) * spd,
+        (Math.random() - 0.3) * spd,
+        Math.sin(ang) * spd
+      );
+      p._life = 0.3 + Math.random() * 0.3;
+      p._gravity = 15;
+      p._shrink = true;
+      this.scene._particles.push(p);
+    }
 
     // 范围方块伤害
     const cx = Math.floor(pos.x), cy = Math.floor(pos.y), cz = Math.floor(pos.z);
@@ -1050,30 +1107,72 @@ export class WeaponRenderer {
       pickPoint.position.set(0.47, 0.12, -0.48);
       this.weaponGroup.add(pickPoint);
     } else if (weaponType === WeaponType.CHAINSAW) {
-      // 电锯 - 锯条+马达
-      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), handleMat);
-      handle.position.set(0.35, -0.28, -0.48);
+      // 链锯 - 手柄 + 马达 + 导板 + 可见锯链锯齿
+      // 后手柄
+      const handleMat2 = new THREE.MeshLambertMaterial({ color: 0x37474F });
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.06), handleMat2);
+      handle.position.set(0.32, -0.28, -0.46);
       this.weaponGroup.add(handle);
-      // 马达外壳
+      // 前手柄（D形握把）
+      const frontHandle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.04, 0.08), handleMat2);
+      frontHandle.position.set(0.32, -0.1, -0.72);
+      this.weaponGroup.add(frontHandle);
+
+      // 马达外壳（红橙色）
       const motorMat = new THREE.MeshLambertMaterial({ color: 0xF4511E });
-      const motor = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.1), motorMat);
-      motor.position.set(0.35, -0.15, -0.48);
+      const motor = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.14), motorMat);
+      motor.position.set(0.32, -0.15, -0.48);
       this.weaponGroup.add(motor);
-      // 导板
-      const barMat = new THREE.MeshLambertMaterial({ color: 0xB0BEC5 });
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.3), barMat);
-      bar.position.set(0.35, -0.08, -0.63);
+      // 马达顶部装饰
+      const motorTop = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.04, 0.06), motorMat);
+      motorTop.position.set(0.32, -0.07, -0.48);
+      this.weaponGroup.add(motorTop);
+
+      // 导板（金属灰色长条）
+      const barMat = new THREE.MeshLambertMaterial({ color: 0x90A4AE });
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.015, 0.34), barMat);
+      bar.position.set(0.32, -0.08, -0.66);
       this.weaponGroup.add(bar);
-      // 锯齿链
-      const chainMat = new THREE.MeshLambertMaterial({ color: 0xECEFF1 });
-      const chain = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.32), chainMat);
-      chain.position.set(0.35, -0.08, -0.63);
+
+      // 导板尖端（圆形）
+      const tipGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.03, 8);
+      const tip = new THREE.Mesh(tipGeo, barMat);
+      tip.rotation.x = Math.PI / 2;
+      tip.position.set(0.32, -0.08, -0.83);
+      this.weaponGroup.add(tip);
+
+      // 链条（带锯齿，会转动）
+      const chainMat = new THREE.MeshLambertMaterial({ color: 0xCFD8DC });
+      const chain = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.035, 0.34), chainMat);
+      chain.position.set(0.32, -0.08, -0.66);
       this.weaponGroup.add(chain);
+      // 保存链条引用用于旋转动画
+      this.chainMesh = chain;
+
+      // 锯齿（多个小三角片，贴在链条上）
+      this.chainTeeth = [];
+      for (let i = 0; i < 14; i++) {
+        const toothGeo = new THREE.BoxGeometry(0.02, 0.03, 0.015);
+        const toothMat = new THREE.MeshLambertMaterial({ color: 0xB0BEC5 });
+        const tooth = new THREE.Mesh(toothGeo, toothMat);
+        const zOffset = -0.15 + i * 0.024;
+        tooth.position.set(0.32, -0.055, -0.66 + zOffset);
+        tooth.userData.phase = i * 0.45;
+        this.weaponGroup.add(tooth);
+        this.chainTeeth.push(tooth);
+      }
+
       // 红色发光指示灯
       const ledMat = new THREE.MeshBasicMaterial({ color: 0xFF1744 });
-      const led = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.02), ledMat);
-      led.position.set(0.35, -0.11, -0.45);
+      const led = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.025), ledMat);
+      led.position.set(0.32, -0.09, -0.43);
       this.weaponGroup.add(led);
+
+      // 油门扳机
+      const triggerMat = new THREE.MeshLambertMaterial({ color: 0x212121 });
+      const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.02), triggerMat);
+      trigger.position.set(0.32, -0.22, -0.5);
+      this.weaponGroup.add(trigger);
     }
   }
 
@@ -1215,22 +1314,35 @@ export class WeaponRenderer {
       glow.position.set(0.35, -0.26, -0.82);
       this.weaponGroup.add(glow);
     } else if (weaponType === WeaponType.GATLING) {
-      // 加特林 - 6根旋转枪管
+      // 加特林 - 6根旋转枪管（枪管组可旋转）
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.35), mat);
       body.position.set(0.35, -0.28, -0.45);
       this.weaponGroup.add(body);
-      // 6根枪管
+      // 6根枪管放在一个可旋转的Group中
+      const barrelGroup = new THREE.Group();
+      barrelGroup.position.set(0.35, -0.26, -0.5);
       const barrelMat = new THREE.MeshLambertMaterial({ color: 0x546E7A });
+      const barrelGeo = new THREE.BoxGeometry(0.022, 0.022, 0.35);
       for (let i = 0; i < 6; i++) {
         const angle = (i / 6) * Math.PI * 2;
-        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.022, 0.3), barrelMat);
+        const barrel = new THREE.Mesh(barrelGeo, barrelMat);
         barrel.position.set(
-          0.35 + Math.cos(angle) * 0.03,
-          -0.26 + Math.sin(angle) * 0.03,
-          -0.65
+          Math.cos(angle) * 0.03,
+          Math.sin(angle) * 0.03,
+          -0.2
         );
-        this.weaponGroup.add(barrel);
+        barrelGroup.add(barrel);
       }
+      // 枪管组前端的圆盘
+      const diskGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.02, 8);
+      const disk = new THREE.Mesh(diskGeo, barrelMat);
+      disk.rotation.x = Math.PI / 2;
+      disk.position.z = -0.38;
+      barrelGroup.add(disk);
+      this.weaponGroup.add(barrelGroup);
+      // 保存引用用于旋转动画
+      this.gatlingBarrels = barrelGroup;
+
       // 弹鼓
       const drum = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.1), new THREE.MeshLambertMaterial({ color: 0x2E2E2E }));
       drum.position.set(0.35, -0.4, -0.42);
@@ -1435,6 +1547,24 @@ export class WeaponRenderer {
       this.reloadHandGroup.visible = false;
     }
 
+    // === 链锯链条转动动画 ===
+    if (this.currentWeapon === WeaponType.CHAINSAW && this.chainTeeth) {
+      this.chainSawSpin = (this.chainSawSpin || 0) + dt * (this.chainSawActive ? 25 : 0);
+      for (const tooth of this.chainTeeth) {
+        tooth.position.z = -0.66 + Math.sin(this.chainSawSpin + tooth.userData.phase) * 0.01;
+        tooth.position.y = -0.055 + Math.cos(this.chainSawSpin + tooth.userData.phase) * 0.008;
+      }
+      if (this.chainMesh) {
+        this.chainMesh.material.color.setHex(this.chainSawActive ? 0xFFF59D : 0xCFD8DC);
+      }
+    }
+
+    // === 加特林枪管旋转动画 ===
+    if (this.currentWeapon === WeaponType.GATLING && this.gatlingBarrels) {
+      this.gatlingSpin = (this.gatlingSpin || 0) + dt * (this.gatlingSpinSpeed || 0);
+      this.gatlingBarrels.rotation.z = this.gatlingSpin;
+    }
+
     if (!this.weaponGroup.parent) {
       this.camera.add(this.weaponGroup);
       this.camera.add(this.reloadHandGroup);
@@ -1470,6 +1600,14 @@ export class WeaponManager {
     // 连续射击（自动武器）
     this.isFiring = false;   // 左键是否按住
     this.reloadingWeaponType = null;
+
+    // 加特林预热状态
+    this._isGatlingFiring = false;
+    this._gatlingSpinSpeed = 0;
+    this._gatlingWarmup = 0;
+
+    // 电锯持续攻击状态
+    this._isChainsawFiring = false;
 
     // 初始化弹匣
     for (const [key, def] of Object.entries(WeaponDefs)) {
@@ -1520,11 +1658,21 @@ export class WeaponManager {
 
   /** 射击（从game.js调用），返回true表示成功 */
   shoot(weaponType, player) {
-    if (this.cooldownTimer > 0) return false;
     if (this.isReloading) return false;
 
     const def = WeaponDefs[weaponType];
     if (!def || def.type !== 'ranged') return false;
+
+    // 加特林预热检查：必须达到满转速才能发射
+    if (weaponType === WeaponType.GATLING) {
+      this._isGatlingFiring = true;
+      if ((this._gatlingWarmup || 0) < 1.0) {
+        return false; // 预热中，不发射子弹
+      }
+      if (this.cooldownTimer > 0) return false;
+    } else {
+      if (this.cooldownTimer > 0) return false;
+    }
 
     // 检查弹匣
     const ammo = this.currentAmmo[weaponType] ?? 0;
@@ -1855,6 +2003,27 @@ export class WeaponManager {
       }
     }
 
+    // 加特林预热/冷却旋转
+    if (this.currentWeapon === WeaponType.GATLING) {
+      if (this._isGatlingFiring) {
+        // 正在按住开火，加速旋转
+        this._gatlingSpinSpeed = Math.min(30, (this._gatlingSpinSpeed || 0) + dt * 60);
+        this._gatlingWarmup = Math.min(1, (this._gatlingWarmup || 0) + dt / 0.6);
+      } else {
+        // 松开开火，减速
+        this._gatlingSpinSpeed = Math.max(0, (this._gatlingSpinSpeed || 0) - dt * 40);
+        this._gatlingWarmup = Math.max(0, (this._gatlingWarmup || 0) - dt / 0.8);
+      }
+      this.renderer.gatlingSpinSpeed = this._gatlingSpinSpeed;
+    } else {
+      this._gatlingWarmup = 0;
+      this._gatlingSpinSpeed = 0;
+      this.renderer.gatlingSpinSpeed = 0;
+    }
+
+    // 链锯状态同步到渲染器
+    this.renderer.chainSawActive = this._isChainsawFiring || false;
+
     // 更新子弹
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const bullet = this.bullets[i];
@@ -1886,17 +2055,39 @@ export class WeaponManager {
           particles.splice(i, 1);
           continue;
         }
-        p.position.add(p._vel.clone().multiplyScalar(dt));
-        p._vel.y -= 15 * dt;
-        if (p._isFlash) {
+
+        if (p._isShockwave) {
+          // 冲击波环：扩散并淡出
+          const t = 1 - p._life / 0.4;
+          const sc = 1 + t * p._maxRadius * 2;
+          p.scale.set(sc, sc, sc);
+          p.material.opacity = Math.max(0, (1 - t) * 0.8);
+        } else if (p._isExplosionCore) {
+          // 爆炸核心：快速膨胀后消失
+          const t = 1 - p._life / 0.25;
+          const sc = 1 + t * p._maxSize * 3;
+          p.scale.set(sc, sc, sc);
+          p.material.opacity = Math.max(0, (1 - t) * 0.9);
+        } else if (p._isFlash) {
           // 闪光球：缩小并消失
           const s = Math.max(0.01, p._life / 0.25);
           p.scale.set(s, s, s);
           p.material.opacity = s;
         } else {
-          p.material.opacity = Math.max(0, p._life * 2);
+          // 普通粒子：位置更新
+          p.position.add(p._vel.clone().multiplyScalar(dt));
+          p._vel.y -= (p._gravity || 15) * dt;
+          p.material.transparent = true;
+          if (p._shrink) {
+            const s = Math.max(0.01, p._life);
+            p.scale.set(s, s, s);
+          }
+          if (p._fadeOpacity) {
+            p.material.opacity = Math.max(0, p._life);
+          } else {
+            p.material.opacity = Math.max(0, p._life * 2);
+          }
         }
-        p.material.transparent = true;
       }
     }
 
