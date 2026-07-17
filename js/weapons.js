@@ -3,7 +3,7 @@
  * 包含：武器定义、弹药系统、子弹系统、近战攻击、第一人称武器渲染、伤害计算、换弹进度
  */
 import * as THREE from 'three';
-import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=75';
+import { BlockType, BlockNames, isSolid, CHUNK_HEIGHT, getBlockColor } from './voxel.js?v=79';
 
 /* ============================================
    武器类型定义
@@ -13,11 +13,15 @@ export const WeaponType = {
   SWORD: 'sword',
   AXE: 'axe',
   PICKAXE: 'pickaxe',
+  CHAINSAW: 'chainsaw',
   PISTOL: 'pistol',
   SMG: 'smg',
   SNIPER: 'sniper',
   RIFLE: 'rifle',
   SHOTGUN: 'shotgun',
+  ASSAULT_RIFLE: 'assault_rifle',
+  GATLING: 'gatling',
+  ROCKET: 'rocket',
   GRENADE: 'grenade',
 };
 
@@ -164,6 +168,75 @@ export const WeaponDefs = {
     bodyColor: 0x2E7D32,
     pushback: 0,
   },
+  [WeaponType.CHAINSAW]: {
+    name: '电锯',
+    type: 'melee',
+    damage: 14,
+    range: 4.5,
+    cooldown: 0.15,
+    blockDamage: 3,
+    color: 0xFF6F00,
+    bodyColor: 0xFF6F00,
+  },
+  [WeaponType.ASSAULT_RIFLE]: {
+    name: '突击步枪',
+    type: 'ranged',
+    damage: 5,
+    range: 70,
+    cooldown: 0.1,
+    blockDamage: 1,
+    bulletSpeed: 110,
+    bulletColor: 0xFFD54F,
+    bulletSize: 0.04,
+    recoil: 0.008,
+    magSize: 30,
+    reloadTime: 2.0,
+    ammoType: 'assault',
+    spread: 0.015,
+    bodyColor: 0x424242,
+    auto: true,
+    pushback: 0.4,
+  },
+  [WeaponType.GATLING]: {
+    name: '加特林',
+    type: 'ranged',
+    damage: 4,
+    range: 60,
+    cooldown: 0.05,
+    blockDamage: 1,
+    bulletSpeed: 100,
+    bulletColor: 0xFF1744,
+    bulletSize: 0.035,
+    recoil: 0.005,
+    magSize: 100,
+    reloadTime: 3.5,
+    ammoType: 'gatling',
+    spread: 0.03,
+    bodyColor: 0x37474F,
+    auto: true,
+    pushback: 0.3,
+  },
+  [WeaponType.ROCKET]: {
+    name: '火箭炮',
+    type: 'ranged',
+    damage: 40,
+    range: 60,
+    cooldown: 1.0,
+    blockDamage: 10,
+    bulletSpeed: 40,
+    bulletColor: 0xFF6D00,
+    bulletSize: 0.15,
+    recoil: 0.1,
+    magSize: 4,
+    reloadTime: 3.0,
+    ammoType: 'rocket',
+    spread: 0.005,
+    bodyColor: 0x5D4037,
+    pushback: 3.0,
+    explosive: true,
+    blastRadius: 4,
+    blastDamage: 60,
+  },
 };
 
 /* ============================================
@@ -281,6 +354,12 @@ class Bullet {
         const hitPrev = hd < horizR && vd < vertR;
 
         if (hitNow || hitPrev) {
+          // 爆炸子弹：范围伤害
+          if (this.weaponDef.explosive && this.weaponDef.blastRadius) {
+            this._explode(world, animalManager);
+            this.destroy();
+            return;
+          }
           // 判定爆头：子弹Y坐标在怪物头部区域（顶部 30%）
           const headThreshold = animal.position.y + h * 0.7;
           const isHeadshot = currPos.y >= headThreshold;
@@ -302,6 +381,11 @@ class Bullet {
   }
 
   _hitBlock(world, x, y, z, blockType) {
+    // 爆炸子弹：范围伤害方块
+    if (this.weaponDef.explosive && this.weaponDef.blastRadius) {
+      this._explode(world);
+      return;
+    }
     const maxHP = getBlockMaxHP(blockType);
     if (maxHP >= 999) return;
 
@@ -318,6 +402,100 @@ class Bullet {
       world.setBlock(x, y, z, BlockType.AIR);
       delete world.blockDamage[key];
       this._spawnBreakParticles(x, y, z, blockType);
+    }
+  }
+
+  _explode(world, animalManager) {
+    const pos = this.mesh.position;
+    const radius = this.weaponDef.blastRadius || 4;
+    const blastDamage = this.weaponDef.blastDamage || 30;
+    const directDamage = this.weaponDef.damage || 40;
+
+    // 爆炸视觉特效
+    const colors = [0xFF6D00, 0xFFAB00, 0xFF3D00];
+    for (let i = 0; i < 20; i++) {
+      const size = 0.1 + Math.random() * 0.2;
+      const geo = new THREE.BoxGeometry(size, size, size);
+      const mat = new THREE.MeshBasicMaterial({ color: colors[i % 3] });
+      const particle = new THREE.Mesh(geo, mat);
+      particle.position.copy(pos);
+      this.scene.add(particle);
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 10,
+        Math.random() * 8 + 2,
+        (Math.random() - 0.5) * 10
+      );
+      particle._vel = vel;
+      particle._life = 0.5 + Math.random() * 0.4;
+      if (!this.scene._particles) this.scene._particles = [];
+      this.scene._particles.push(particle);
+    }
+
+    // 爆炸光球
+    const lightGeo = new THREE.BoxGeometry(radius * 0.6, radius * 0.6, radius * 0.6);
+    const lightMat = new THREE.MeshBasicMaterial({ color: 0xFF6D00, transparent: true, opacity: 0.4 });
+    const lightMesh = new THREE.Mesh(lightGeo, lightMat);
+    lightMesh.position.copy(pos);
+    this.scene.add(lightMesh);
+    lightMesh._vel = new THREE.Vector3(0, 0, 0);
+    lightMesh._life = 0.3;
+    lightMesh._fadeOut = true;
+    if (!this.scene._particles) this.scene._particles = [];
+    this.scene._particles.push(lightMesh);
+
+    // 范围方块伤害
+    const cx = Math.floor(pos.x), cy = Math.floor(pos.y), cz = Math.floor(pos.z);
+    const r = Math.ceil(radius);
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dz = -r; dz <= r; dz++) {
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (dist > radius) continue;
+          const bx = cx + dx, by = cy + dy, bz = cz + dz;
+          if (by < 0 || by >= CHUNK_HEIGHT) continue;
+          const block = world.getBlock(bx, by, bz);
+          if (!isSolid(block)) continue;
+          const maxHP = getBlockMaxHP(block);
+          if (maxHP >= 999) continue;
+          if (!world.blockDamage) world.blockDamage = {};
+          const key = `${bx},${by},${bz}`;
+          const dmg = Math.floor(blastDamage * (1 - dist / radius));
+          if (!world.blockDamage[key]) {
+            world.blockDamage[key] = { hp: maxHP, type: block };
+          }
+          world.blockDamage[key].hp -= dmg;
+          if (world.blockDamage[key].hp <= 0) {
+            world.setBlock(bx, by, bz, BlockType.AIR);
+            delete world.blockDamage[key];
+          }
+        }
+      }
+    }
+
+    // 范围怪物伤害
+    if (animalManager) {
+      for (const animal of animalManager.animals) {
+        if (!animal.alive) continue;
+        const dist = pos.distanceTo(animal.position);
+        if (dist > radius + 1) continue;
+        const dmg = dist < 1 ? directDamage : Math.floor(blastDamage * (1 - dist / (radius + 1)));
+        animal.takeDamage(dmg, { position: pos.clone() }, false, false, false);
+        if (this._weaponManager) {
+          this._weaponManager._onAnimalHit(animal, false);
+        }
+      }
+    }
+
+    // 范围内玩家伤害
+    if (this._weaponManager && this._weaponManager._player) {
+      const player = this._weaponManager._player;
+      const dist = pos.distanceTo(player.position);
+      if (dist < radius + 1) {
+        const dmg = Math.floor(blastDamage * 0.5 * (1 - dist / (radius + 1)));
+        if (dmg > 0 && player.takeDamage) {
+          player.takeDamage(dmg);
+        }
+      }
     }
   }
 
@@ -871,6 +1049,31 @@ export class WeaponRenderer {
       const pickPoint = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.04), mat);
       pickPoint.position.set(0.47, 0.12, -0.48);
       this.weaponGroup.add(pickPoint);
+    } else if (weaponType === WeaponType.CHAINSAW) {
+      // 电锯 - 锯条+马达
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), handleMat);
+      handle.position.set(0.35, -0.28, -0.48);
+      this.weaponGroup.add(handle);
+      // 马达外壳
+      const motorMat = new THREE.MeshLambertMaterial({ color: 0xF4511E });
+      const motor = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.1), motorMat);
+      motor.position.set(0.35, -0.15, -0.48);
+      this.weaponGroup.add(motor);
+      // 导板
+      const barMat = new THREE.MeshLambertMaterial({ color: 0xB0BEC5 });
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.3), barMat);
+      bar.position.set(0.35, -0.08, -0.63);
+      this.weaponGroup.add(bar);
+      // 锯齿链
+      const chainMat = new THREE.MeshLambertMaterial({ color: 0xECEFF1 });
+      const chain = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.32), chainMat);
+      chain.position.set(0.35, -0.08, -0.63);
+      this.weaponGroup.add(chain);
+      // 红色发光指示灯
+      const ledMat = new THREE.MeshBasicMaterial({ color: 0xFF1744 });
+      const led = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.02), ledMat);
+      led.position.set(0.35, -0.11, -0.45);
+      this.weaponGroup.add(led);
     }
   }
 
@@ -981,6 +1184,92 @@ export class WeaponRenderer {
       const pump = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.12), new THREE.MeshLambertMaterial({ color: 0x5D4037 }));
       pump.position.set(0.35, -0.32, -0.58);
       this.weaponGroup.add(pump);
+    } else if (weaponType === WeaponType.ASSAULT_RIFLE) {
+      // 突击步枪 - 中等尺寸，带握把和弹匣
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.42), mat);
+      body.position.set(0.35, -0.28, -0.5);
+      this.weaponGroup.add(body);
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.2), accentMat);
+      barrel.position.set(0.35, -0.26, -0.72);
+      this.weaponGroup.add(barrel);
+      // 弹匣
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.14, 0.05), new THREE.MeshLambertMaterial({ color: 0x2E2E2E }));
+      mag.position.set(0.35, -0.4, -0.48);
+      mag.rotation.x = 0.15;
+      this.weaponGroup.add(mag);
+      // 握把
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.05), mat);
+      grip.position.set(0.35, -0.38, -0.36);
+      grip.rotation.x = 0.2;
+      this.weaponGroup.add(grip);
+      // 枪托
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.07, 0.12), mat);
+      stock.position.set(0.35, -0.28, -0.3);
+      this.weaponGroup.add(stock);
+      // 准星
+      const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.02), mat);
+      sight.position.set(0.35, -0.22, -0.48);
+      this.weaponGroup.add(sight);
+      const glowMat = new THREE.MeshBasicMaterial({ color: def.bulletColor });
+      const glow = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.02), glowMat);
+      glow.position.set(0.35, -0.26, -0.82);
+      this.weaponGroup.add(glow);
+    } else if (weaponType === WeaponType.GATLING) {
+      // 加特林 - 6根旋转枪管
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.35), mat);
+      body.position.set(0.35, -0.28, -0.45);
+      this.weaponGroup.add(body);
+      // 6根枪管
+      const barrelMat = new THREE.MeshLambertMaterial({ color: 0x546E7A });
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.022, 0.3), barrelMat);
+        barrel.position.set(
+          0.35 + Math.cos(angle) * 0.03,
+          -0.26 + Math.sin(angle) * 0.03,
+          -0.65
+        );
+        this.weaponGroup.add(barrel);
+      }
+      // 弹鼓
+      const drum = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.1), new THREE.MeshLambertMaterial({ color: 0x2E2E2E }));
+      drum.position.set(0.35, -0.4, -0.42);
+      this.weaponGroup.add(drum);
+      // 握把
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.05), mat);
+      grip.position.set(0.35, -0.38, -0.3);
+      grip.rotation.x = 0.2;
+      this.weaponGroup.add(grip);
+      const glowMat = new THREE.MeshBasicMaterial({ color: def.bulletColor });
+      const glow = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), glowMat);
+      glow.position.set(0.35, -0.26, -0.82);
+      this.weaponGroup.add(glow);
+    } else if (weaponType === WeaponType.ROCKET) {
+      // 火箭炮 - 粗管，带瞄准器
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.5), mat);
+      body.position.set(0.35, -0.3, -0.48);
+      this.weaponGroup.add(body);
+      // 粗炮管
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.2), accentMat);
+      barrel.position.set(0.35, -0.3, -0.7);
+      this.weaponGroup.add(barrel);
+      // 炮口
+      const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.04), new THREE.MeshLambertMaterial({ color: 0x1B5E20 }));
+      muzzle.position.set(0.35, -0.3, -0.82);
+      this.weaponGroup.add(muzzle);
+      // 握把
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.05), mat);
+      grip.position.set(0.35, -0.4, -0.36);
+      grip.rotation.x = 0.25;
+      this.weaponGroup.add(grip);
+      // 瞄准器
+      const sight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.04), new THREE.MeshLambertMaterial({ color: 0x1B5E20 }));
+      sight.position.set(0.35, -0.2, -0.48);
+      this.weaponGroup.add(sight);
+      const glowMat = new THREE.MeshBasicMaterial({ color: def.bulletColor });
+      const glow = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.04), glowMat);
+      glow.position.set(0.35, -0.3, -0.85);
+      this.weaponGroup.add(glow);
     }
   }
 
@@ -1170,6 +1459,7 @@ export class WeaponManager {
     // 命中回调（由Game设置）
     this.onEnemyHit = null;   // (animal) => void
     this.onEnemyKill = null;  // (animal) => void
+    this._player = null;      // 玩家引用（用于爆炸伤害）
 
     // 弹药系统
     this.currentAmmo = {};   // 武器类型 -> 当前弹匣剩余
@@ -1645,9 +1935,9 @@ export class Inventory {
     this.slots[0] = { type: 'weapon', weaponType: WeaponType.FIST, count: 1 };
     this.slots[1] = { type: 'weapon', weaponType: WeaponType.SWORD, count: 1 };
     this.slots[2] = { type: 'weapon', weaponType: WeaponType.PISTOL, count: 1 };
-    this.slots[3] = { type: 'weapon', weaponType: WeaponType.SNIPER, count: 1 };
-    this.slots[4] = { type: 'weapon', weaponType: WeaponType.SMG, count: 1 };
-    this.slots[5] = { type: 'weapon', weaponType: WeaponType.SHOTGUN, count: 1 };
+    this.slots[3] = { type: 'weapon', weaponType: WeaponType.ASSAULT_RIFLE, count: 1 };
+    this.slots[4] = { type: 'weapon', weaponType: WeaponType.SHOTGUN, count: 1 };
+    this.slots[5] = { type: 'weapon', weaponType: WeaponType.ROCKET, count: 1 };
     // 快捷栏 6: 手榴弹
     this.slots[6] = { type: 'weapon', weaponType: WeaponType.GRENADE, count: 5 };
     // 快捷栏 7-8: 方块
@@ -1656,16 +1946,25 @@ export class Inventory {
     // 背包 (第二行起)
     this.slots[9] = { type: 'weapon', weaponType: WeaponType.AXE, count: 1 };
     this.slots[10] = { type: 'weapon', weaponType: WeaponType.PICKAXE, count: 1 };
-    this.slots[11] = { type: 'weapon', weaponType: WeaponType.RIFLE, count: 1 };
-    this.slots[12] = { type: 'block', blockType: BlockType.WOOD, count: 64 };
-    this.slots[13] = { type: 'block', blockType: BlockType.DIRT, count: 64 };
-    this.slots[13] = { type: 'block', blockType: BlockType.SAND, count: 64 };
-    this.slots[14] = { type: 'block', blockType: BlockType.LEAVES, count: 64 };
-    this.slots[15] = { type: 'ammo', ammoType: 'pistol', count: 120 };
-    this.slots[16] = { type: 'ammo', ammoType: 'smg', count: 300 };
-    this.slots[17] = { type: 'ammo', ammoType: 'sniper', count: 30 };
-    this.slots[18] = { type: 'ammo', ammoType: 'rifle', count: 300 };
-    this.slots[19] = { type: 'ammo', ammoType: 'shotgun', count: 60 };
+    this.slots[11] = { type: 'weapon', weaponType: WeaponType.CHAINSAW, count: 1 };
+    this.slots[12] = { type: 'weapon', weaponType: WeaponType.GATLING, count: 1 };
+    this.slots[13] = { type: 'weapon', weaponType: WeaponType.SNIPER, count: 1 };
+    this.slots[14] = { type: 'weapon', weaponType: WeaponType.RIFLE, count: 1 };
+    this.slots[15] = { type: 'weapon', weaponType: WeaponType.SMG, count: 1 };
+    // 背包第三行: 方块
+    this.slots[16] = { type: 'block', blockType: BlockType.WOOD, count: 64 };
+    this.slots[17] = { type: 'block', blockType: BlockType.DIRT, count: 64 };
+    this.slots[18] = { type: 'block', blockType: BlockType.SAND, count: 64 };
+    this.slots[19] = { type: 'block', blockType: BlockType.LEAVES, count: 64 };
+    // 背包第四行: 弹药
+    this.slots[20] = { type: 'ammo', ammoType: 'pistol', count: 120 };
+    this.slots[21] = { type: 'ammo', ammoType: 'assault', count: 240 };
+    this.slots[22] = { type: 'ammo', ammoType: 'gatling', count: 500 };
+    this.slots[23] = { type: 'ammo', ammoType: 'rocket', count: 12 };
+    this.slots[24] = { type: 'ammo', ammoType: 'rifle', count: 300 };
+    this.slots[25] = { type: 'ammo', ammoType: 'smg', count: 300 };
+    this.slots[26] = { type: 'ammo', ammoType: 'sniper', count: 30 };
+    this.slots[27] = { type: 'ammo', ammoType: 'shotgun', count: 60 };
   }
 
   getHotbarItem(index) {
@@ -1776,6 +2075,9 @@ export class Inventory {
       { type: 'shotgun', count: shotgunAmmo },
       { type: 'smg', count: smgAmmo || 0 },
       { type: 'sniper', count: sniperAmmo || 0 },
+      { type: 'assault', count: 0 },
+      { type: 'gatling', count: 0 },
+      { type: 'rocket', count: 0 },
     ];
     for (const a of ammoTypes) {
       if (a.count <= 0) continue;
@@ -1958,7 +2260,7 @@ export class InventoryUI {
       return `#${c.toString(16).padStart(6, '0')}`;
     }
     if (item.type === 'ammo') {
-      const colors = { pistol: '#FFEB3B', rifle: '#00E5FF', shotgun: '#FF6D00', smg: '#76FF03', sniper: '#E040FB' };
+      const colors = { pistol: '#FFEB3B', rifle: '#00E5FF', shotgun: '#FF6D00', smg: '#76FF03', sniper: '#E040FB', assault: '#FFD54F', gatling: '#FF1744', rocket: '#FF6D00' };
       return colors[item.ammoType] || '#888';
     }
     return '#888';
@@ -1968,7 +2270,7 @@ export class InventoryUI {
     if (item.type === 'block') return BlockNames[item.blockType] || '?';
     if (item.type === 'weapon') return WeaponDefs[item.weaponType]?.name || '?';
     if (item.type === 'ammo') {
-      const names = { pistol: '手枪弹', rifle: '步枪弹', shotgun: '霰弹', smg: '冲锋枪弹', sniper: '狙击弹' };
+      const names = { pistol: '手枪弹', rifle: '步枪弹', shotgun: '霰弹', smg: '冲锋枪弹', sniper: '狙击弹', assault: '突击弹', gatling: '加特林弹', rocket: '火箭弹' };
       return names[item.ammoType] || '弹药';
     }
     return '?';

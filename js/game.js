@@ -8,14 +8,14 @@ import {
   World, Chunk, BlockType, BlockNames, isSolid,
   CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, getBlockColor,
   isMobileDevice, getRenderDistance,
-} from './voxel.js?v=78';
-import { AnimalManager } from './animals.js?v=78';
+} from './voxel.js?v=79';
+import { AnimalManager } from './animals.js?v=79';
 import {
   WeaponManager, WeaponRenderer, Inventory, InventoryUI,
   WeaponType, WeaponDefs, getBlockMaxHP, spawnHitEffect, computeKnockback,
   GrenadeTrajectory,
-} from './weapons.js?v=78';
-import { audio } from './audio.js?v=78';
+} from './weapons.js?v=79';
+import { audio } from './audio.js?v=79';
 
 /* ============================================
    玩家类 - 第一人称角色控制 + HP系统
@@ -1118,6 +1118,7 @@ class Game {
 
   _initWeaponSystem() {
     this.weaponManager = new WeaponManager(this.scene, this.camera, this.world, this.animalManager);
+    this.weaponManager._player = this.player;
     this.inventoryUI = new InventoryUI(this.inventory);
     this.grenadeTrajectory = new GrenadeTrajectory(this.scene);
 

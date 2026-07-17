@@ -4,9 +4,9 @@
  * HP系统、血条、AI行为（巡逻/追踪/攻击）、受击特效、死亡逻辑
  */
 import * as THREE from 'three';
-import { BlockType, isSolid } from './voxel.js?v=75';
-import { spawnHitEffect, computeKnockback } from './weapons.js?v=75';
-import { audio } from './audio.js?v=75';
+import { BlockType, isSolid } from './voxel.js?v=79';
+import { spawnHitEffect, computeKnockback } from './weapons.js?v=79';
+import { audio } from './audio.js?v=79';
 
 /* ============================================
    常量配置
@@ -26,18 +26,18 @@ const MIN_SPAWN_DIST = 4;
 const WANDER_RANGE = 35;
 
 // AI 常量
-const DETECTION_RANGE = 35;        // 检测玩家的距离
-const ATTACK_RANGE_MELEE = 2.0;    // 近战攻击距离
-const ATTACK_RANGE_RANGED = 20;    // 远程攻击距离
-const CHASE_SPEED_MULT = 1.3;      // 追击速度倍率（降低）
+const DETECTION_RANGE = 22;        // 检测玩家的距离（降低）
+const ATTACK_RANGE_MELEE = 1.8;    // 近战攻击距离
+const ATTACK_RANGE_RANGED = 16;    // 远程攻击距离（降低）
+const CHASE_SPEED_MULT = 1.1;      // 追击速度倍率（降低）
 // 模型默认朝 +Z；Three.js Y 旋转 θ 使 +Z 朝向 (sinθ, cosθ)
 // 因此朝向 (dx,dz) 的旋转角 = atan2(dx, dz)（dx 在前, dz 在后）
-const ATTACK_COOLDOWN_MELEE = 2.4; // 近战冷却（降低攻击频率）
-const ATTACK_COOLDOWN_RANGED = 4.0;// 远程冷却（降低攻击频率）
-const DAMAGE_MELEE_SCOUT = 3;      // 侦察机器人近战伤害
-const DAMAGE_MELEE_HEAVY = 8;      // 重型机器人近战伤害
-const DAMAGE_RANGED_HEAVY = 5;     // 重型机器人远程伤害
-const KNOCKBACK_STRENGTH = 4;      // 击退力度
+const ATTACK_COOLDOWN_MELEE = 3.5; // 近战冷却（进一步降低攻击频率）
+const ATTACK_COOLDOWN_RANGED = 5.5;// 远程冷却（进一步降低攻击频率）
+const DAMAGE_MELEE_SCOUT = 2;      // 侦察机器人近战伤害（降低）
+const DAMAGE_MELEE_HEAVY = 6;      // 重型机器人近战伤害（降低）
+const DAMAGE_RANGED_HEAVY = 4;     // 重型机器人远程伤害（降低）
+const KNOCKBACK_STRENGTH = 3;      // 击退力度（降低）
 
 /* ============================================
    工具函数
@@ -953,10 +953,10 @@ export class FlyerBot extends Robot {
     this.hp = 25;
     this.robotType = 'flyer';
     this.speed = 2.5;
-    this.attackDamage = 4;
-    this.attackRange = 18;        // 远程射击距离
-    this.detectRange = 28;
-    this.attackCooldown = 2.4;    // 射击冷却（降低攻击频率）
+    this.attackDamage = 3;
+    this.attackRange = 14;        // 远程射击距离（降低）
+    this.detectRange = 20;
+    this.attackCooldown = 3.5;    // 射击冷却（进一步降低）
     this.hoverHeight = 5 + Math.random() * 3; // 5-8格高
     this.attackTimer = 0;
     this.collisionWidth = 0.8;
@@ -1101,11 +1101,11 @@ export class BruteBot extends Robot {
     this.speed = 1.0;
     this.wanderSpeed = 0.6;
     this.turnSpeed = 1.3;
-    this.attackDamage = 12;
-    this.attackRange = 2.8;
-    this._baseAttackCooldown = 3.6;
-    this.detectRange = 20;
-    this.attackCooldown = 3.6;
+    this.attackDamage = 8;
+    this.attackRange = 2.5;
+    this._baseAttackCooldown = 5.0;
+    this.detectRange = 16;
+    this.attackCooldown = 5.0;
     this.attackTimer = 0;
     this.height = 1.6;
     this.collisionWidth = 1.1;
@@ -1210,14 +1210,14 @@ export class SpiderBot extends Robot {
     this.robotType = 'spider';
     this.maxHP = 15;
     this.hp = 15;
-    this.speed = 3.0;
-    this.wanderSpeed = 1.8;
-    this.turnSpeed = 3.5;
-    this.attackDamage = 3;
+    this.speed = 2.5;
+    this.wanderSpeed = 1.5;
+    this.turnSpeed = 3.0;
+    this.attackDamage = 2;
     this.attackRange = 1.5;
-    this._baseAttackCooldown = 1.6;
-    this.detectRange = 22;
-    this.attackCooldown = 1.6;
+    this._baseAttackCooldown = 2.8;
+    this.detectRange = 16;
+    this.attackCooldown = 2.8;
     this.attackTimer = 0;
     this.height = 0.5;
     this.collisionWidth = 0.6;
