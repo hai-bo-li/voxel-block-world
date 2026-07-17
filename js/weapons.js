@@ -253,26 +253,38 @@ class Bullet {
       }
     }
 
-    // 碰撞检测 - 生物（考虑机器人完整体型 + 射线检测防止快速子弹穿透）
+    // 碰撞检测 - 生物（圆柱体碰撞：水平半径=半宽，垂直半径=半高，分轴检测更精确）
     if (animalManager) {
       const prevPos = this.mesh.position.clone().sub(moveVec);
+      const currPos = this.mesh.position;
       for (const animal of animalManager.animals) {
         if (!animal.alive) continue;
         const h = animal.collisionHeight || 1.0;
         const w = animal.collisionWidth || 0.7;
-        // 体型中心点在脚部上方 h/2 处
-        const center = new THREE.Vector3(animal.position.x, animal.position.y + h * 0.5, animal.position.z);
-        const hitRadius = Math.max(w, h * 0.5) + 0.15;
-        // 点到中心距离检测
-        const distNow = this.mesh.position.distanceTo(center);
-        const distPrev = prevPos.distanceTo(center);
-        // 检测本帧移动路径上是否有穿过球体（防止高速子弹穿透）
-        if (distNow < hitRadius || distPrev < hitRadius || 
-            (distNow !== distPrev && distNow < hitRadius + moveVec.length() && distPrev > distNow)) {
+        const bodyCenterY = animal.position.y + h * 0.5;
+        // 圆柱体参数：水平半径用半宽，垂直半径用半高
+        const horizR = w * 0.5 + 0.12;
+        const vertR = h * 0.5 + 0.08;
+
+        // 检查当前位置
+        let dx = currPos.x - animal.position.x;
+        let dz = currPos.z - animal.position.z;
+        let hd = Math.sqrt(dx * dx + dz * dz);
+        let vd = Math.abs(currPos.y - bodyCenterY);
+        const hitNow = hd < horizR && vd < vertR;
+
+        // 检查上一帧位置（CCD - 防止高速子弹穿透）
+        dx = prevPos.x - animal.position.x;
+        dz = prevPos.z - animal.position.z;
+        hd = Math.sqrt(dx * dx + dz * dz);
+        vd = Math.abs(prevPos.y - bodyCenterY);
+        const hitPrev = hd < horizR && vd < vertR;
+
+        if (hitNow || hitPrev) {
           // 判定爆头：子弹Y坐标在怪物头部区域（顶部 30%）
           const headThreshold = animal.position.y + h * 0.7;
-          const isHeadshot = this.mesh.position.y >= headThreshold;
-          animal.takeDamage(this.weaponDef.damage, { position: this.mesh.position.clone() }, !!this.weaponDef.auto, false, isHeadshot);
+          const isHeadshot = currPos.y >= headThreshold;
+          animal.takeDamage(this.weaponDef.damage, { position: currPos.clone() }, !!this.weaponDef.auto, false, isHeadshot);
           // 通知武器管理器
           if (this._weaponManager) {
             this._weaponManager._onAnimalHit(animal, isHeadshot);
@@ -1364,11 +1376,14 @@ export class WeaponManager {
         // 计算垂直距离（射线到体型中心的距离）
         const closestPoint = origin.clone().add(dir.clone().multiplyScalar(projLen));
         const perpDist = closestPoint.distanceTo(bodyCenter);
-        // 命中判定：垂直距离 < 碰撞半径，且射线最近点高度在怪物身体范围内
-        const hitRadius = Math.max(cw, ch * 0.5) + 0.2;
-        const yMin = ap.y;         // 脚底（不低于地面）
-        const yMax = ap.y + ch;    // 体顶
-        if (perpDist < hitRadius && closestPoint.y >= yMin && closestPoint.y <= yMax) {
+        // 命中判定：水平垂直分轴检测（圆柱体），半宽作为水平半径
+        const horizR = cw * 0.5 + 0.25; // 近战给稍大余量
+        const vertR = ch * 0.5 + 0.15;
+        const dx = closestPoint.x - bodyCenter.x;
+        const dz = closestPoint.z - bodyCenter.z;
+        const horizDist = Math.sqrt(dx * dx + dz * dz);
+        const vertDist = Math.abs(closestPoint.y - bodyCenter.y);
+        if (horizDist < horizR && vertDist < vertR) {
           // 先检查方块阻挡（从相机到怪物之间的方块）
           let blocked = false;
           const blockStep = 0.2;
